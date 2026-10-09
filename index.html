@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Pop Dash</title>
+  <meta name="description" content="Pop Dash: a rhythm platformer with seven game modes, practice mode and a level editor.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- The one canvas everything is drawn on: menus sky, the game, and the editor. -->
+  <canvas id="stage"></canvas>
+
+  <!-- ================= In-game HUD ================= -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <span id="hud-mode"></span>
+      <div id="hud-bar"><div id="hud-fill"></div></div>
+      <span id="hud-pct">0%</span>
+      <button id="btn-pause" class="btn icon-btn" aria-label="Pause">II</button>
+    </div>
+    <div id="practice-bar" class="hidden">
+      <button id="btn-cp-add" class="btn green">+ Checkpoint <kbd>Z</kbd></button>
+      <button id="btn-cp-del" class="btn red">Remove <kbd>X</kbd></button>
+    </div>
+  </div>
+  <div id="toast"></div>
+
+  <!-- ================= Main menu ================= -->
+  <section id="screen-menu" class="screen">
+    <h1 class="logo"><span>POP</span> <span>DASH</span></h1>
+    <p class="tagline">Jump, fly and flip to the beat</p>
+    <div class="menu-buttons">
+      <button class="btn big green" data-go="levels">Play</button>
+      <button class="btn big blue" data-go="custom">Level Editor</button>
+      <button class="btn big pink" data-go="icons">Icons</button>
+      <button class="btn big yellow" data-go="settings">Settings</button>
+    </div>
+    <div id="menu-totals" class="totals"></div>
+    <p class="hint">Click, tap, or press Space to jump</p>
+  </section>
+
+  <!-- ================= Level select ================= -->
+  <section id="screen-levels" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>Pick a Level</h2><span></span></header>
+    <div class="carousel">
+      <button id="lv-prev" class="btn icon-btn" aria-label="Previous level">&lt;</button>
+      <div id="lv-card" class="card level-card"></div>
+      <button id="lv-next" class="btn icon-btn" aria-label="Next level">&gt;</button>
+    </div>
+  </section>
+
+  <!-- ================= Icon kit ================= -->
+  <section id="screen-icons" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>Icons</h2><span></span></header>
+    <div class="card wide">
+      <div id="icon-preview" class="icon-preview"></div>
+      <h3>Face</h3>
+      <div id="icon-designs" class="grid"></div>
+      <h3>Main color</h3>
+      <div id="icon-c1" class="grid swatches"></div>
+      <h3>Second color</h3>
+      <div id="icon-c2" class="grid swatches"></div>
+    </div>
+  </section>
+
+  <!-- ================= Settings ================= -->
+  <section id="screen-settings" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>Settings</h2><span></span></header>
+    <div class="card">
+      <label class="row">Music <input id="set-music" type="range" min="0" max="1" step="0.05"></label>
+      <label class="row">Sounds <input id="set-sfx" type="range" min="0" max="1" step="0.05"></label>
+      <div class="row"><span>Erase all progress</span><button id="set-reset" class="btn red">Reset</button></div>
+      <div class="help">
+        <b>Controls</b><br>
+        Jump or fly: click, tap, Space, W or Up<br>
+        Pause: Esc or P &nbsp; Restart: R<br>
+        Practice: Z adds a checkpoint, X removes one
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= My levels ================= -->
+  <section id="screen-custom" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>My Levels</h2><span></span></header>
+    <div class="card wide">
+      <div class="row">
+        <button id="cl-new" class="btn green">New Level</button>
+        <button id="cl-import" class="btn blue">Import</button>
+      </div>
+      <div id="cl-list" class="level-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= Level editor ================= -->
+  <section id="screen-editor" class="screen editor hidden">
+    <div class="ed-top">
+      <button id="ed-back" class="btn">Back</button>
+      <input id="ed-name" class="text" maxlength="24" aria-label="Level name">
+      <button id="ed-undo" class="btn">Undo</button>
+      <button id="ed-redo" class="btn">Redo</button>
+      <button id="ed-settings" class="btn yellow">Setup</button>
+      <button id="ed-export" class="btn blue">Export</button>
+      <button id="ed-test" class="btn green">Test</button>
+      <button id="ed-save" class="btn pink">Save</button>
+    </div>
+    <div class="ed-tools">
+      <button class="btn tool" data-tool="build" title="Build (1)">Build</button>
+      <button class="btn tool" data-tool="erase" title="Erase (2)">Erase</button>
+      <button class="btn tool" data-tool="pan" title="Move the view (3)">Move</button>
+      <button id="ed-rot" class="btn" title="Rotate (Q or E)">Turn</button>
+      <button id="ed-zin" class="btn" title="Zoom in">+</button>
+      <button id="ed-zout" class="btn" title="Zoom out">-</button>
+    </div>
+    <div id="ed-status" class="ed-status"></div>
+    <div class="ed-bottom">
+      <div id="ed-tabs" class="tabs"></div>
+      <div id="ed-items" class="items"></div>
+    </div>
+  </section>
+
+  <!-- ================= Pause ================= -->
+  <div id="overlay-pause" class="overlay hidden">
+    <div class="card">
+      <h2>Paused</h2>
+      <div id="pause-info" class="sub"></div>
+      <button id="pz-resume" class="btn big green">Resume</button>
+      <button id="pz-restart" class="btn big blue">Restart</button>
+      <button id="pz-mode" class="btn big yellow">Practice Mode</button>
+      <button id="pz-exit" class="btn big red">Exit</button>
+    </div>
+  </div>
+
+  <!-- ================= Level complete ================= -->
+  <div id="overlay-complete" class="overlay hidden">
+    <div class="card">
+      <h2 id="cp-title">Level Complete!</h2>
+      <div id="cp-stats" class="stats"></div>
+      <div id="cp-coins" class="coins"></div>
+      <button id="cp-retry" class="btn big blue">Play Again</button>
+      <button id="cp-exit" class="btn big green">Continue</button>
+    </div>
+  </div>
+
+  <!-- ================= Pop-up box used by the editor ================= -->
+  <div id="overlay-modal" class="overlay hidden">
+    <div class="card wide">
+      <h2 id="md-title"></h2>
+      <div id="md-body"></div>
+      <div id="md-buttons" class="row"></div>
+    </div>
+  </div>
+
+  <!-- Scripts load in order. Each one adds to the global "PD" object. -->
+  <script src="js/objects.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/render.js"></script>
+  <script src="audio/songs.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/save.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="levels/level1.js"></script>
+  <script src="levels/level2.js"></script>
+  <script src="levels/level3.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
