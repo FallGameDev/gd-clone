@@ -10,8 +10,8 @@
    Example:
        PD.CUSTOM_SONGS = { level1: 'audio/my-song.mp3' };
    ========================================================================== */
-PD.CUSTOM_SONGS = {};
-
+PD.CUSTOM_SONGS = { menu: 'audio/menu.mp3', practice: 'audio/practice.mp3', level1: 'audio/level1.mp3', level2: 'audio/level2.mp3', level3: 'audio/level3.mp3' };
+ 
 /* Sound effect files. Any effect not listed here is made by code.
    Effect ids: "die", "jump", "orb", "pad", "portal", "coin", "win", "click" */
 PD.CUSTOM_SFX = {
