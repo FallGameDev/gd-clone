@@ -57,7 +57,8 @@ Put a song in the `audio` folder and list it in `audio/songs.js`:
 PD.CUSTOM_SONGS = { level1: 'audio/my-song.mp3' };
 ```
 
-Only use music you made or have a license for.
+Only use music you made or have a license for. If you add songs, credit the people who made them by
+filling in `PD.SONG_CREDITS` in the same file. Those lines show up on the Credits screen.
 
 ## Developer tools
 

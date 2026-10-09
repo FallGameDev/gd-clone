@@ -17,3 +17,10 @@ PD.CUSTOM_SONGS = {};
 PD.CUSTOM_SFX = {
   die: 'audio/boom.mp3'
 };
+
+/* Extra lines for the Credits screen. If you add your own music above, credit
+   the people who made it here. Each entry is [role, name].
+   Example:
+       PD.SONG_CREDITS = [['Level 1 music', 'Song Name by Artist Name']];
+*/
+PD.SONG_CREDITS = [];

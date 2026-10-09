@@ -8,7 +8,7 @@
   'use strict';
   var PD = root.PD, A = PD.Audio, S = PD.Save, G = PD.Game, R = PD.Render;
 
-  var SCREENS = ['menu', 'levels', 'icons', 'settings', 'custom', 'editor'];
+  var SCREENS = ['menu', 'levels', 'icons', 'settings', 'credits', 'custom', 'editor'];
   var current = 'menu';
   var levelIdx = 0;          // Which built-in level the carousel is showing.
   var playing = null;        // { data, practice, test, from } while a level runs.
@@ -35,6 +35,7 @@
     if (name === 'icons') renderIcons();
     if (name === 'settings') renderSettings();
     if (name === 'custom') renderCustom();
+    if (name === 'credits') renderCredits();
   };
 
   // ------------------------------------------------------------------------
@@ -182,6 +183,32 @@
     var st = S.get().settings;
     $('set-music').value = st.music;
     $('set-sfx').value = st.sfx;
+  }
+
+  // ------------------------------------------------------------------------
+  // Credits
+  // ------------------------------------------------------------------------
+  /* The list of who made what. Each entry is [role, name, optional note].
+     Music credits for your own songs are added from audio/songs.js. */
+  var CREDITS = [
+    ['A game by', 'Wildcard Studios'],
+    ['Game design and direction', 'FallGameDev'],
+    ['Code, art and levels', 'Built with Claude', 'Every shape is drawn by code. There are no image files.'],
+    ['Music', 'Made by code', 'A tiny synth band in js/audio.js writes each tune.'],
+    ['Crash sound', 'Provided by FallGameDev'],
+    ['Thanks to', 'The rhythm platformers that inspired this game'],
+    ['And', 'You, for playing!']
+  ];
+
+  function renderCredits() {
+    var card = $('credits-card');
+    card.textContent = '';
+    card.appendChild(el('div', 'name', PD.GAME_NAME));
+    CREDITS.concat(PD.SONG_CREDITS || []).forEach(function (c) {
+      card.appendChild(el('div', 'role', c[0]));
+      card.appendChild(el('div', 'who', c[1]));
+      if (c[2]) card.appendChild(el('div', 'note', c[2]));
+    });
   }
 
   // ------------------------------------------------------------------------

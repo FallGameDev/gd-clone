@@ -143,6 +143,13 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
 .swatches .tile { width: 42px; height: 42px; border-radius: 50%; }
 .swatches .tile.sel { outline: 4px solid #ffffff; outline-offset: 2px; }
 
+/* ---------- Credits ---------- */
+.credits { text-align: center; gap: 4px; }
+.credits .name { font-size: clamp(28px, 5vw, 40px); font-weight: 700; color: var(--yellow); text-shadow: 0 4px 0 var(--ink); }
+.credits .role { color: var(--muted); font-size: 14px; margin-top: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.credits .who { font-size: 20px; font-weight: 700; text-shadow: 0 3px 0 var(--ink); }
+.credits .note { color: var(--muted); font-size: 14px; }
+
 /* ---------- My levels ---------- */
 .level-list { display: flex; flex-direction: column; gap: 10px; }
 .level-row { background: var(--card-2); border: 4px solid var(--ink); border-radius: 18px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
