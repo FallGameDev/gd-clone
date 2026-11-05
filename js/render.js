@@ -352,6 +352,76 @@
     }
   }
 
+  /* ----- Ball designs -----
+     Drawn on top of the plain ball body. Everything is clipped to the circle
+     so patterns can never spill outside the ball. Design 0 is the classic look. */
+  function drawBallDeco(ctx, d, c1, c2) {
+    if (d === 0) {
+      ctx.beginPath(); ctx.arc(0, 0, 0.3, 0, TAU); ink(ctx, c2, 0.07);
+      ctx.fillStyle = OUT; ctx.fillRect(-0.5, -0.05, 1, 0.1); ctx.fillRect(-0.05, -0.5, 0.1, 1);
+      ctx.beginPath(); ctx.arc(0, 0, 0.12, 0, TAU); ctx.fillStyle = c1; ctx.fill();
+      return;
+    }
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0, 0, 0.5, 0, TAU); ctx.clip();
+    ctx.fillStyle = c2; ctx.strokeStyle = OUT; ctx.lineWidth = 0.06; ctx.lineJoin = 'round';
+    switch (d) {
+      case 1: // Two diagonal stripes
+        ctx.save(); ctx.rotate(Math.PI / 4);
+        ctx.fillRect(-0.7, -0.24, 1.4, 0.15); ctx.fillRect(-0.7, 0.09, 1.4, 0.15);
+        ctx.restore(); break;
+      case 2: // Target: a ring with a dot
+        ctx.beginPath(); ctx.arc(0, 0, 0.32, 0, TAU); ctx.lineWidth = 0.1; ctx.strokeStyle = c2; ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, 0.11, 0, TAU); ctx.fill(); break;
+      case 3: // Smiley face
+        ctx.beginPath(); ctx.arc(-0.16, 0.14, 0.075, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0.16, 0.14, 0.075, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0.04, 0.27, Math.PI * 1.2, Math.PI * 1.8);
+        ctx.lineWidth = 0.11; ctx.strokeStyle = OUT; ctx.stroke();
+        ctx.lineWidth = 0.05; ctx.strokeStyle = c2; ctx.stroke(); break;
+      case 4: // Star
+        star(ctx, 0, 0, 0.36, 0.16); ctx.fill(); ctx.stroke(); break;
+      case 5: // Checkerboard
+        ctx.fillRect(0, 0, 0.6, 0.6); ctx.fillRect(-0.6, -0.6, 0.6, 0.6);
+        ctx.fillStyle = OUT; ctx.fillRect(-0.03, -0.6, 0.06, 1.2); ctx.fillRect(-0.6, -0.03, 1.2, 0.06); break;
+      case 6: // Racing band
+        ctx.fillRect(-0.6, -0.13, 1.2, 0.26);
+        ctx.fillStyle = OUT; ctx.fillRect(-0.6, -0.16, 1.2, 0.04); ctx.fillRect(-0.6, 0.12, 1.2, 0.04); break;
+      case 7: // Two rings
+        ctx.strokeStyle = c2; ctx.lineWidth = 0.08;
+        ctx.beginPath(); ctx.arc(0, 0, 0.38, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, 0.2, 0, TAU); ctx.stroke(); break;
+      case 8: // Lightning bolt
+        poly(ctx, [0.1, 0.42, -0.22, 0.0, -0.02, 0.0, -0.12, -0.42, 0.24, 0.06, 0.04, 0.06]);
+        ctx.fill(); ctx.stroke(); break;
+      case 9: // Eye
+        ctx.beginPath(); ctx.ellipse(0, 0, 0.38, 0.22, 0, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0.04, 0, 0.11, 0, TAU); ctx.fillStyle = OUT; ctx.fill(); break;
+    }
+    ctx.restore();
+    // Fresh outline on top so the edge stays crisp.
+    ctx.beginPath(); ctx.arc(0, 0, 0.5, 0, TAU); ctx.lineWidth = LW; ctx.strokeStyle = OUT; ctx.stroke();
+  }
+
+  /* ----- Wave designs -----
+     The marking inside the arrow-shaped wave. Design 0 is the classic triangle. */
+  function drawWaveDeco(ctx, d, c2) {
+    ctx.fillStyle = c2; ctx.strokeStyle = c2; ctx.lineWidth = 0.07; ctx.lineJoin = 'round';
+    switch (d) {
+      case 0: poly(ctx, [-0.2, -0.14, 0.2, 0, -0.2, 0.14]); ctx.fill(); break;
+      case 1: poly(ctx, [-0.3, -0.22, 0.32, 0, -0.3, 0.22]); ctx.fill(); break;                  // Bigger triangle
+      case 2: poly(ctx, [-0.3, -0.14, -0.08, 0, -0.3, 0.14]); ctx.fill();                       // Two chevrons
+              poly(ctx, [-0.02, -0.1, 0.2, 0, -0.02, 0.1]); ctx.fill(); break;
+      case 3: ctx.fillRect(-0.3, -0.05, 0.62, 0.1); break;                                       // Center stripe
+      case 4: poly(ctx, [-0.2, 0, 0.02, -0.17, 0.24, 0, 0.02, 0.17]); ctx.fill(); break;         // Diamond
+      case 5: poly(ctx, [-0.22, -0.16, 0.22, 0, -0.22, 0.16]); ctx.stroke(); break;              // Outline only
+      case 6: poly(ctx, [-0.34, 0.24, 0.3, 0.02, -0.18, 0.02]); ctx.fill(); break;               // Top wing
+      case 7: [-0.18, 0, 0.18].forEach(function (x) { ctx.beginPath(); ctx.arc(x, 0, 0.06, 0, TAU); ctx.fill(); }); break;
+      case 8: poly(ctx, [-0.26, 0.16, 0.1, 0, -0.26, -0.16, -0.14, 0]); ctx.fill(); break;       // Arrow head
+      case 9: star(ctx, 0, 0, 0.19, 0.085); ctx.fill(); break;                                   // Star
+    }
+  }
+
   function cubeBody(ctx, icon, size) {
     ctx.save(); ctx.scale(size, size);
     rr(ctx, -0.5, -0.5, 1, 1, 0.14); ink(ctx, icon.c1);
@@ -364,6 +434,8 @@
      p    = { x, y, rot, mode, g, mini, vy, speed, grounded }
      icon = { design, c1, c2 } */
   R.drawPlayer = function (ctx, p, icon, time) {
+    // The save gives one design per game mode. Pick the one for the mode we are drawing.
+    if (icon.designs) icon = { design: icon.designs[p.mode] || 0, c1: icon.c1, c2: icon.c2 };
     var s = p.mini ? 0.6 : 1;
     ctx.save();
     ctx.translate(p.x, p.y);
@@ -390,9 +462,7 @@
       case 'ball':
         ctx.rotate(-p.rot * Math.PI / 180); ctx.scale(s, s);
         ctx.beginPath(); ctx.arc(0, 0, 0.5, 0, TAU); ink(ctx, icon.c1);
-        ctx.beginPath(); ctx.arc(0, 0, 0.3, 0, TAU); ink(ctx, icon.c2, 0.07);
-        ctx.fillStyle = OUT; ctx.fillRect(-0.5, -0.05, 1, 0.1); ctx.fillRect(-0.05, -0.5, 0.1, 1);
-        ctx.beginPath(); ctx.arc(0, 0, 0.12, 0, TAU); ctx.fillStyle = icon.c1; ctx.fill();
+        drawBallDeco(ctx, icon.design, icon.c1, icon.c2);
         break;
       case 'ufo':
         ctx.rotate(tilt * 0.25); ctx.scale(s, s * p.g);
@@ -405,7 +475,7 @@
       case 'wave':
         ctx.rotate(tilt); ctx.scale(s, s);
         poly(ctx, [-0.45, -0.34, 0.5, 0, -0.45, 0.34, -0.22, 0]); ink(ctx, icon.c1);
-        poly(ctx, [-0.2, -0.14, 0.2, 0, -0.2, 0.14]); ctx.fillStyle = icon.c2; ctx.fill();
+        drawWaveDeco(ctx, icon.design, icon.c2);
         break;
       case 'robot':
         ctx.scale(s, s * p.g);
