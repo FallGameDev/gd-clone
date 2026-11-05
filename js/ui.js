@@ -8,10 +8,11 @@
   'use strict';
   var PD = root.PD, A = PD.Audio, S = PD.Save, G = PD.Game, R = PD.Render;
 
-  var SCREENS = ['menu', 'levels', 'icons', 'settings', 'credits', 'custom', 'editor'];
+  var SCREENS = ['menu', 'levels', 'icons', 'shop', 'settings', 'credits', 'custom', 'editor'];
   var current = 'menu';
   var levelIdx = 0;          // Which built-in level the carousel is showing.
   var playing = null;        // { data, practice, test, from } while a level runs.
+  var kitMode = 'cube';      // Which game mode the icon kit and the shop are showing.
 
   var UI = PD.UI = {};
 
@@ -33,6 +34,7 @@
     if (name === 'menu') renderMenu();
     if (name === 'levels') renderLevelCard();
     if (name === 'icons') renderIcons();
+    if (name === 'shop') renderShop(true);
     if (name === 'settings') renderSettings();
     if (name === 'custom') renderCustom();
     if (name === 'credits') renderCredits();
@@ -46,7 +48,8 @@
     box.textContent = '';
     var a = el('div', 'pill'); a.appendChild(el('span', 'dot star')); a.appendChild(el('span', '', t.stars + ' stars'));
     var b = el('div', 'pill'); b.appendChild(el('span', 'dot coin')); b.appendChild(el('span', '', t.coins + ' coins'));
-    box.appendChild(a); box.appendChild(b);
+    var c = el('div', 'pill'); c.appendChild(el('span', 'dot ball')); c.appendChild(el('span', '', S.balls() + (S.balls() === 1 ? ' ball' : ' balls')));
+    box.appendChild(a); box.appendChild(b); box.appendChild(c);
   }
 
   // ------------------------------------------------------------------------
@@ -136,33 +139,56 @@
     line('Jumps', stats.jumps);
     line('Time', stats.time.toFixed(1) + ' s');
     if (!stats.practice && !stats.test && stats.level.stars) line('Stars earned', '+' + stats.level.stars);
-    if (stats.practice) line('Tip', 'Now try normal mode!');
+    if (stats.balls > 0) line('Balls earned', '+' + stats.balls);
+    if (stats.practice) line('Tip', 'Now try normal mode! Practice gives no balls.');
     var coins = $('cp-coins'); coins.textContent = '';
     for (var i = 0; i < stats.coinCount; i++) coins.appendChild(el('span', 'dot ' + (stats.coins.indexOf(i) >= 0 ? 'coin' : 'empty')));
     $('overlay-complete').classList.remove('hidden');
   }
 
   // ------------------------------------------------------------------------
-  // Icon picker
+  // Icon picker and shop
   // ------------------------------------------------------------------------
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // "12 balls" pill with a little blue ball, used on the icon kit and the shop.
+  function ballPill(box) {
+    box.textContent = '';
+    box.appendChild(el('span', 'dot ball'));
+    box.appendChild(el('span', '', S.balls() + (S.balls() === 1 ? ' ball' : ' balls')));
+  }
+
+  // One tab per game mode. Shows the icon you have picked for that mode.
+  function modeTabs(box, icon, after) {
+    box.textContent = '';
+    PD.MODES.forEach(function (m) {
+      var t = el('button', 'tile mode-tab' + (m === kitMode ? ' sel' : ''));
+      t.appendChild(R.iconThumb(m, { design: icon.designs[m], c1: icon.c1, c2: icon.c2 }, 54));
+      t.title = cap(m);
+      t.setAttribute('aria-label', cap(m));
+      t.onclick = function () { kitMode = m; after(); };
+      box.appendChild(t);
+    });
+  }
+
   function renderIcons() {
     var save = S.get(), icon = S.icon();
-    var prev = $('icon-preview'); prev.textContent = '';
-    PD.MODES.forEach(function (m) { prev.appendChild(R.iconThumb(m, icon, 74)); });
+    ballPill($('icon-balls'));
+    modeTabs($('icon-preview'), icon, renderIcons);
+    $('icon-title').textContent = cap(kitMode) + ' icon';
 
+    // Only the icons you own for this mode show up here. The rest are in the shop.
     var grid = $('icon-designs'); grid.textContent = '';
+    var missing = 0;
     for (var i = 0; i < PD.ICON_COUNT; i++) (function (i) {
-      var open = S.iconUnlocked(i);
-      var b = el('button', 'tile' + (save.icon.design === i ? ' sel' : '') + (open ? '' : ' locked'));
-      b.appendChild(R.iconThumb('cube', { design: i, c1: icon.c1, c2: icon.c2 }, 52));
-      if (!open) {
-        var rule = S.ICON_RULES[i];
-        b.appendChild(el('span', 'lock', rule.stars ? rule.stars + ' stars' : rule.coins + ' coins'));
-        b.title = 'Locked';
-      } else b.onclick = function () { save.icon.design = i; S.write(); renderIcons(); };
-      b.setAttribute('aria-label', 'Face ' + (i + 1) + (open ? '' : ' (locked)'));
+      if (!S.iconOwned(kitMode, i)) { missing++; return; }
+      var b = el('button', 'tile' + (icon.designs[kitMode] === i ? ' sel' : ''));
+      b.appendChild(R.iconThumb(kitMode, { design: i, c1: icon.c1, c2: icon.c2 }, 52));
+      b.setAttribute('aria-label', cap(kitMode) + ' icon ' + (i + 1));
+      b.onclick = function () { S.setIconDesign(kitMode, i); renderIcons(); };
       grid.appendChild(b);
     })(i);
+    $('icon-more').textContent = missing ? missing + ' more ' + kitMode + ' icon' + (missing > 1 ? 's' : '') + ' in the shop' : 'You own every ' + kitMode + ' icon!';
 
     ['c1', 'c2'].forEach(function (key) {
       var row = $('icon-' + key); row.textContent = '';
@@ -174,6 +200,62 @@
         row.appendChild(b);
       });
     });
+  }
+
+  // What the shopkeeper says in his speech bubble.
+  var HELLO = ['Welcome! Spend your balls on new icons.', 'Hi there! Pick an icon you like.', 'Hey! Got some balls to spend?'];
+  function say(text) { $('keeper-say').textContent = text; }
+
+  // opening = true when the shop was just opened (so the shopkeeper says hello).
+  function renderShop(opening) {
+    var icon = S.icon();
+    ballPill($('shop-balls'));
+    modeTabs($('shop-modes'), icon, renderShop);
+    $('shop-title').textContent = cap(kitMode) + ' icons for sale';
+    if (opening) say(HELLO[Math.floor(Math.random() * HELLO.length)]);
+
+    var grid = $('shop-grid'); grid.textContent = '';
+    var forSale = 0;
+    for (var i = 0; i < PD.ICON_COUNT; i++) (function (i) {
+      if (S.iconOwned(kitMode, i)) return;               // Already yours, so it is not for sale.
+      forSale++;
+      var price = S.ICON_PRICES[i], rule = S.ICON_RULES[i];
+      var afford = S.balls() >= price;
+      var b = el('button', 'tile shop-tile' + (afford ? '' : ' poor'));
+      b.appendChild(R.iconThumb(kitMode, { design: i, c1: icon.c1, c2: icon.c2 }, 52));
+      var tag = el('span', 'price'); tag.appendChild(el('span', 'dot ball')); tag.appendChild(el('span', '', String(price)));
+      b.appendChild(tag);
+      // Some icons also unlock for free with stars or coins. Tell the player.
+      b.title = rule ? 'Also unlocks free with ' + (rule.stars ? rule.stars + ' stars' : rule.coins + ' coins') : '';
+      b.setAttribute('aria-label', cap(kitMode) + ' icon ' + (i + 1) + ', ' + price + ' balls');
+      b.onclick = function () { askToBuy(i, price); };
+      grid.appendChild(b);
+    })(i);
+    if (!forSale) {
+      grid.appendChild(el('div', 'sub', 'Nothing left to buy here!'));
+      if (!opening) say('You own every ' + kitMode + ' icon. Try another mode!');
+    }
+  }
+
+  // Ask before spending. If you cannot afford it the shopkeeper tells you how many more you need.
+  function askToBuy(i, price) {
+    var icon = S.icon();
+    if (S.balls() < price) {
+      say('You need ' + (price - S.balls()) + ' more balls for that one.');
+      return;
+    }
+    var body = el('div', 'buy-body');
+    body.appendChild(R.iconThumb(kitMode, { design: i, c1: icon.c1, c2: icon.c2 }, 96));
+    body.appendChild(el('div', 'sub', 'This ' + kitMode + ' icon costs ' + price + ' balls.'));
+    UI.modal('Buy this icon?', body, [
+      { text: 'Cancel', cls: 'blue' },
+      { text: 'Buy', cls: 'green', fn: function () {
+        var res = S.buyIcon(kitMode, i);
+        if (res.ok) { S.setIconDesign(kitMode, i); say('Thanks! I put it on for you.'); }
+        else say('Hmm, that did not work.');
+        renderShop();
+      } }
+    ]);
   }
 
   // ------------------------------------------------------------------------
