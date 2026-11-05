@@ -42,6 +42,9 @@ html, body {
 
 .bar { width: 100%; max-width: 900px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
 .bar .btn { justify-self: start; }
+/* Right side of a header: a ball counter and maybe a small button */
+.bar-right { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.bar-right .btn { justify-self: auto; }
 h2 { margin: 0; font-size: clamp(24px, 4vw, 36px); text-shadow: 0 4px 0 var(--ink); }
 h3 { margin: 14px 0 8px; font-size: 18px; color: var(--muted); }
 
@@ -153,6 +156,8 @@ kbd { background: var(--ink); color: #fff; border-radius: 6px; padding: 1px 7px;
 .dot { width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--ink); display: inline-block; }
 .dot.star { background: var(--yellow); border-radius: 4px; transform: rotate(45deg); }
 .dot.coin { background: #ffd23d; }
+/* Blue ball: the currency you spend in the shop */
+.dot.ball { background: radial-gradient(circle at 35% 30%, #d6f3ff, #35b8ff 55%, #1b6fd8); }
 .dot.empty { background: #4a3f8f; }
 
 /* ---------- Cards ---------- */
@@ -206,6 +211,46 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
 .tile .lock { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 700; text-align: center; line-height: 1.2; padding: 2px; }
 .swatches .tile { width: 42px; height: 42px; border-radius: 50%; }
 .swatches .tile.sel { outline: 4px solid #ffffff; outline-offset: 2px; }
+
+/* Small square button (the shop button on the icon kit). Same chunky look as the big square buttons. */
+.btn.mini { width: 52px; height: 52px; padding: 0; display: grid; place-items: center; border-radius: 14px; box-shadow: 0 5px 0 var(--ink); }
+.btn.mini .ico { width: 70%; height: 70%; }
+
+/* Mode tabs: smaller, and each shows the icon you picked for that mode */
+.mode-tab { width: 62px; height: 62px; }
+#icon-more { text-align: center; color: var(--muted); }
+.buy-body { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 0 12px; }
+
+/* ---------- Shop ---------- */
+.shop-layout { display: flex; align-items: flex-end; justify-content: center; gap: 18px; width: 100%; max-width: 900px; flex-wrap: wrap; }
+.keeper-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 0 0 auto; }
+.bubble {
+  position: relative; max-width: 220px; min-height: 52px; background: #ffffff; color: var(--ink); font-weight: 700;
+  border: 4px solid var(--ink); border-radius: 18px; padding: 10px 14px; box-shadow: 0 5px 0 var(--ink); text-align: center; line-height: 1.25;
+}
+/* Little tail pointing down at the shopkeeper */
+.bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -14px; width: 18px; height: 18px; background: #ffffff;
+  border-right: 4px solid var(--ink); border-bottom: 4px solid var(--ink); transform: translateX(-50%) rotate(45deg);
+}
+/* Eddy: a row of 8 frames. steps(8) jumps from frame to frame, which makes him wave. */
+.keeper {
+  --kw: clamp(120px, 20vw, 170px);
+  width: var(--kw); height: calc(var(--kw) * 290 / 260);
+  background-image: var(--eddy); background-repeat: no-repeat; background-size: calc(var(--kw) * 8) 100%;
+  filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.45));
+  animation: keeper-wave 0.9s steps(8) infinite;
+}
+@keyframes keeper-wave { from { background-position: 0 0; } to { background-position: calc(var(--kw) * -8) 0; } }
+@media (prefers-reduced-motion: reduce) { .keeper { animation: none; } }
+.shop-card { flex: 1 1 340px; min-width: 0; }
+.shop-tile { width: 78px; height: 88px; align-content: start; padding-top: 8px; }
+.shop-tile .price {
+  position: absolute; left: 0; right: 0; bottom: 5px; display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-weight: 700; font-size: 15px;
+}
+.shop-tile .price .dot { width: 14px; height: 14px; border-width: 2px; }
+.shop-tile.poor { opacity: 0.6; }
 
 /* ---------- Credits ---------- */
 .credits { text-align: center; gap: 4px; }
