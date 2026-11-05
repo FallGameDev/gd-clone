@@ -260,7 +260,10 @@
     if (!opts.test) {
       var pct = percent();
       var best = PD.Save.report(level.data.id, opts.practice ? 'practice' : 'normal', pct);
-      if (best && pct > 0) toast('New best: ' + pct + '%');
+      var got = PD.Save.lastAward;              // Blue balls handed out for this run (normal mode only).
+      var gotText = got + (got === 1 ? ' ball' : ' balls');
+      if (best && pct > 0) toast('New best: ' + pct + '%' + (got ? '  +' + gotText : ''));
+      else if (got) toast('+' + gotText);
     }
   }
 
@@ -278,7 +281,10 @@
       coins: sim.coins.slice(), coinCount: level.coinCount,
       practice: !!opts.practice, test: !!opts.test, level: level.data
     };
-    if (!opts.test) PD.Save.report(level.data.id, opts.practice ? 'practice' : 'normal', 100, sim.coins);
+    if (!opts.test) {
+      PD.Save.report(level.data.id, opts.practice ? 'practice' : 'normal', 100, sim.coins);
+      stats.balls = PD.Save.lastAward;          // The rest of the level's balls (0 in practice).
+    }
     if (opts.onComplete) opts.onComplete(stats);
   }
 
