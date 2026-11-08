@@ -271,6 +271,46 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
 .dot-i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 2px solid var(--ink); }
 .dot-i.sel { background: #ffffff; }
 
+/* ---------- Settings tabs, switches and the Account tab ---------- */
+.set-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; }
+.set-tabs .tab { font-size: 16px; padding: 6px 22px; }
+#set-general, #set-account { display: flex; flex-direction: column; gap: 14px; }
+.row .sub.left { text-align: left; }
+
+/* On / off switch */
+.switch {
+  position: relative; flex: 0 0 auto; width: 62px; height: 34px; padding: 0; cursor: pointer;
+  background: var(--card-2); border: 4px solid var(--ink); border-radius: 999px; box-shadow: 0 3px 0 var(--ink); transition: background 0.15s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+  background: #ffffff; border: 3px solid var(--ink); transition: transform 0.15s;
+}
+.switch[aria-checked="true"] { background: var(--green); }
+.switch[aria-checked="true"]::after { transform: translateX(28px); }
+
+.acct-form { display: grid; gap: 10px; }
+.acct-field { display: grid; gap: 4px; text-align: left; font-weight: 700; }
+.acct-field.grow { flex: 1; min-width: 0; }
+.acct-msg { min-height: 1.3em; text-align: center; color: var(--muted); }
+.acct-msg.error { color: #ff9a9a; }
+.acct-msg.ok { color: #8affb0; }
+.acct-id { text-align: center; }
+.acct-name { font-size: 26px; font-weight: 700; }
+.acct-section { display: grid; gap: 10px; border-top: 3px solid rgba(255, 255, 255, 0.12); padding-top: 12px; }
+.acct-section h3 { margin: 0; }
+.acct-section .inline { display: flex; gap: 8px; align-items: end; }
+
+/* Frames per second counter */
+#fps {
+  position: fixed; top: 6px; left: 8px; z-index: 60; pointer-events: none;
+  font: 700 14px/1 sans-serif; color: #ffffff; text-shadow: 0 1px 2px #000, 0 0 4px #000;
+}
+
+/* Low performance mode: no looping animations or soft shadows on the menus */
+body.low-perf .logo, body.low-perf .keeper { animation: none; }
+body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-perf .soc-name { filter: none; }
+
 /* ---------- Achievements ---------- */
 .ach-total { height: 14px; background: rgba(0, 0, 0, 0.35); border: 3px solid var(--ink); border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
 #ach-total-fill { height: 100%; width: 0; background: var(--yellow); transition: width 0.3s; }
@@ -425,6 +465,8 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
   <div id="toast"></div>
   <!-- Pop-up that appears when an achievement unlocks -->
   <div id="ach-toast"></div>
+  <!-- Frames per second (shown when Show FPS is on in Settings) -->
+  <div id="fps" class="hidden"></div>
 
   <!-- ================= Main menu ================= -->
   <section id="screen-menu" class="screen">
@@ -582,16 +624,35 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
 
   <section id="screen-settings" class="screen hidden">
     <header class="bar"><button class="btn" data-go="menu">Back</button><h2>Settings</h2><span></span></header>
-    <div class="card">
-      <label class="row">Music <input id="set-music" type="range" min="0" max="1" step="0.05"></label>
-      <label class="row">Sounds <input id="set-sfx" type="range" min="0" max="1" step="0.05"></label>
-      <div class="row"><span>Erase all progress</span><button id="set-reset" class="btn red">Reset</button></div>
-      <div class="help">
-        <b>Controls</b><br>
-        Jump or fly: click, tap, Space, W or Up<br>
-        Pause: Esc or P &nbsp; Restart: R<br>
-        Practice: Z adds a checkpoint, X removes one
+    <div class="card wide">
+      <!-- Two tabs: General (sound and performance) and Account (sign in and account settings) -->
+      <div class="set-tabs">
+        <button class="tab sel" data-tab="general">General</button>
+        <button class="tab" data-tab="account">Account</button>
       </div>
+
+      <div id="set-general">
+        <label class="row">Music <input id="set-music" type="range" min="0" max="1" step="0.05"></label>
+        <label class="row">Sounds <input id="set-sfx" type="range" min="0" max="1" step="0.05"></label>
+        <div class="row">
+          <div><b>Low performance mode</b><div class="sub left">A simpler background, fewer particles and no menu animations. Helps slow computers.</div></div>
+          <button id="set-lowperf" class="switch" role="switch" aria-checked="false" aria-label="Low performance mode"></button>
+        </div>
+        <div class="row">
+          <div><b>Show FPS</b><div class="sub left">Shows how many frames per second the game is running at, in the top left corner.</div></div>
+          <button id="set-fps" class="switch" role="switch" aria-checked="false" aria-label="Show FPS"></button>
+        </div>
+        <div class="row"><span>Erase all progress</span><button id="set-reset" class="btn red">Reset</button></div>
+        <div class="help">
+          <b>Controls</b><br>
+          Jump or fly: click, tap, Space, W or Up<br>
+          Pause: Esc or P &nbsp; Restart: R<br>
+          Practice: Z adds a checkpoint, X removes one
+        </div>
+      </div>
+
+      <!-- The Account tab is drawn by js/ui.js (renderAccount) -->
+      <div id="set-account" class="hidden"></div>
     </div>
   </section>
 
@@ -1469,12 +1530,15 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
   /* Draw the sky and scenery behind the level.
      theme is one of the ids in PD.THEMES. The sky color (bg) tints every theme. */
   var THEME_DRAW = {};
+  R.lowPerf = false;     // Set by the game when Low performance mode is on.
   R.drawBackground = function (ctx, W, H, camX, bg, time, pulse, theme) {
-    (THEME_DRAW[theme] || THEME_DRAW.night)(ctx, W, H, camX, bg, time, pulse || 0);
+    var draw = R.lowPerf ? THEME_DRAW.lite : (THEME_DRAW[theme] || THEME_DRAW.night);
+    draw(ctx, W, H, camX, bg, time, pulse || 0);
   };
 
   // A tiny picture of a theme, used by the editor's theme picker.
   R.themeThumb = function (theme, bg, w, h) {
+    var lp = R.lowPerf; R.lowPerf = false;     // Previews always show the real scenery.
     var c = document.createElement('canvas'), dpr = Math.min(2, root.devicePixelRatio || 1);
     c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
     c.style.width = w + 'px'; c.style.height = h + 'px';
@@ -1483,6 +1547,7 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
     var vw = 640, vh = Math.round(640 * h / w);
     x.scale(w / vw, h / vh);
     R.drawBackground(x, vw, vh, 40, bg, 1.2, 0, theme);
+    R.lowPerf = lp;
     return c;
   };
 
@@ -1519,6 +1584,12 @@ textarea { width: 100%; height: 200px; font-family: ui-monospace, Menlo, Consola
     for (var x = x0, i = first; x < W + size; x += size, i++) draw(x, i);
   }
   function hash(i) { var h = (Math.imul(i + 1, 2654435761) >>> 0) % 1000; return h / 1000; }
+
+  // ----- Low performance mode: just the sky and one layer of hills (very cheap to draw) -----
+  THEME_DRAW.lite = function (ctx, W, H, camX, bg) {
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    hills(ctx, W, H, camX * 6, H * 0.7, H * 0.08, PD.mixColor(bg, '#000000', 0.35), 0.0026);
+  };
 
   // ----- Night Sky: stars, a moon and two layers of hills (the original look) -----
   THEME_DRAW.night = function (ctx, W, H, camX, bg, time, pulse) {
@@ -2660,7 +2731,7 @@ PD.SONG_CREDITS = [];
       owned: {},                          // Icons bought in the shop, like { 'ship:5': true }
       stats: { deaths: 0, ballsEarned: 0, flawless: false },   // Counters used by achievements.
       ach: {},                            // Unlocked achievements: { id: time it was unlocked }
-      settings: { music: 0.7, sfx: 0.8 },
+      settings: { music: 0.7, sfx: 0.8, lowPerf: false, showFps: false },
       custom: []                          // Levels made in the editor.
     };
   }
@@ -2684,11 +2755,50 @@ PD.SONG_CREDITS = [];
     if (typeof data.balls !== 'number') data.balls = 0;
     if (!data.stats) data.stats = { deaths: 0, ballsEarned: 0, flawless: false };
     if (!data.ach) data.ach = {};
+    // Settings added later (old saves do not have them).
+    data.settings = Object.assign({ music: 0.7, sfx: 0.8, lowPerf: false, showFps: false }, data.settings);
     return data;
   };
 
-  S.write = function () {
+  // Save to this device. (Quiet version: used when the server's copy is merged in, so it does not trigger another sync.)
+  function persist() {
     try { root.localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* Storage is full or blocked. */ }
+  }
+  S.afterWrite = null;                    // api.js sets this so changes get synced to the account.
+  S.write = function () { persist(); if (S.afterWrite) S.afterWrite(); };
+
+  /* The part of the save that belongs to an online account (not volume settings or levels you made).
+     This is what gets sent to the server. */
+  S.exportSave = function () {
+    return { progress: data.progress, owned: data.owned, icon: data.icon, balls: data.balls, stats: data.stats, ach: data.ach };
+  };
+
+  /* Mix a save from the server into this device's save, keeping the best of both:
+     higher percents, coins from both, any icon bought on either side. The server decides the ball total.
+     replace = true throws away this device's progress first and uses the account's copy only. */
+  S.applyServerSave = function (srv, replace) {
+    if (!srv || typeof srv !== 'object') return;
+    if (replace) { data.progress = {}; data.owned = {}; data.ach = {}; }
+    var sp = srv.progress || {};
+    Object.keys(sp).forEach(function (id) {
+      var r = sp[id], l = S.level(id);
+      l.normal = Math.max(l.normal, r.normal || 0);
+      l.practice = Math.max(l.practice, r.practice || 0);
+      l.attempts = Math.max(l.attempts || 0, r.attempts || 0);
+      l.ballsGot = Math.max(l.ballsGot || 0, r.ballsGot || 0);
+      l.done = !!(l.done || r.done);
+      (r.coins || []).forEach(function (c) { if (l.coins.indexOf(c) < 0) l.coins.push(c); });
+    });
+    Object.keys(srv.owned || {}).forEach(function (k) { data.owned[k] = true; });
+    Object.keys(srv.ach || {}).forEach(function (k) { if (!data.ach[k]) data.ach[k] = srv.ach[k]; });
+    if (srv.icon && typeof srv.icon === 'object') data.icon = { design: srv.icon.design || 0, designs: srv.icon.designs || {}, c1: srv.icon.c1 || 0, c2: srv.icon.c2 || 0 };
+    if (typeof srv.balls === 'number') data.balls = srv.balls;
+    if (srv.stats) {
+      data.stats.deaths = Math.max(data.stats.deaths || 0, srv.stats.deaths || 0);
+      data.stats.ballsEarned = srv.stats.ballsEarned || 0;
+      data.stats.flawless = !!(data.stats.flawless || srv.stats.flawless);
+    }
+    persist();
   };
 
   S.get = function () { return data; };
@@ -2964,6 +3074,210 @@ PD.SONG_CREDITS = [];
 
 </script>
   <script>
+/* js/api.js */
+/* ==========================================================================
+   api.js : talks to the online Pop Dash API (the Supabase edge function).
+
+   What it does:
+   - log in, make an account, log out, change name or password, delete account
+   - keep the save (progress, icons, balls, achievements) in sync with the account
+   The game works fine without an account. Everything is saved on this device
+   first, and syncing is an extra that happens in the background.
+
+   The screens (js/ui.js) call PD.Api and redraw when it says something changed.
+   ========================================================================== */
+(function (root) {
+  'use strict';
+  var PD = root.PD || (root.PD = {});
+  var S = function () { return PD.Save; };
+  var Api = PD.Api = {};
+
+  // Where the API lives. This is your Supabase edge function called "api".
+  Api.BASE = 'https://mbiryymxtlafikshwzpt.supabase.co/functions/v1/api';
+
+  var KEY = 'popdash.session';       // Where the login is remembered (kept apart from the save file).
+  var session = loadSession();       // { token, expiresAt, account: { id, username, displayName, isAdmin, createdAt } }
+  var listeners = [];
+  var syncing = false, again = false, pending = null, dirty = false, timer = null;
+
+  /* What the sync is doing right now. The Account screen shows this.
+       'idle'      nothing yet     'syncing'  talking to the server   'ok'       saved online
+       'offline'   no connection   'conflict' this device and the account disagree   'error' something else */
+  Api.status = 'idle';
+  Api.statusText = '';
+  Api.lastSync = 0;
+
+  // ---------------------------------------------------------------- login memory
+  function loadSession() {
+    try {
+      var s = JSON.parse(root.localStorage.getItem(KEY) || 'null');
+      if (s && s.token && s.account && (!s.expiresAt || new Date(s.expiresAt) > new Date())) return s;
+    } catch (e) { /* Storage is blocked or broken: just stay logged out. */ }
+    return null;
+  }
+  function saveSession() {
+    try {
+      if (session) root.localStorage.setItem(KEY, JSON.stringify(session));
+      else root.localStorage.removeItem(KEY);
+    } catch (e) { /* Ignore. */ }
+  }
+  function setSession(r) {
+    session = { token: r.token, expiresAt: r.expiresAt, account: r.account };
+    saveSession();
+  }
+  function clearSession(why) {
+    session = null; dirty = false; clearTimeout(timer);
+    saveSession();
+    Api.status = 'idle'; Api.statusText = why || '';
+    emit();
+  }
+
+  Api.loggedIn = function () { return !!session; };
+  Api.account = function () { return session ? session.account : null; };
+
+  // Screens register a function here and it runs whenever login or sync state changes.
+  Api.onChange = function (fn) { listeners.push(fn); };
+  function emit() { listeners.forEach(function (fn) { try { fn(); } catch (e) { /* A screen bug must not stop syncing. */ } }); }
+  function setStatus(status, text) { Api.status = status; Api.statusText = text || ''; emit(); }
+
+  // ---------------------------------------------------------------- talking to the server
+  /* One request. Resolves with the answer, or rejects with an Error that has
+     .status (0 means "could not reach the server") and .code (like "bad_login"). */
+  function request(method, path, body, keepalive) {
+    var ctl = root.AbortController ? new root.AbortController() : null;
+    var timeout = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : null;
+    var headers = { 'Content-Type': 'application/json' };
+    if (session) headers.Authorization = 'Bearer ' + session.token;
+    return root.fetch(Api.BASE + path, {
+      method: method, headers: headers, keepalive: !!keepalive,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (data) {
+        clearTimeout(timeout);
+        if (res.ok) return data;
+        throw apiError(res.status, data);
+      });
+    }, function () {
+      clearTimeout(timeout);
+      var e = new Error('Could not reach the server. Check your internet connection.');
+      e.status = 0; e.code = 'network';
+      throw e;
+    });
+  }
+
+  function apiError(status, data) {
+    var msg, code;
+    if (data && data.error) { msg = data.error.message; code = data.error.code; }
+    else if (status === 401 || status === 403) {
+      // The answer was not in our format, so Supabase itself refused the call.
+      msg = 'The server refused the request. In Supabase, turn off "Verify JWT" for the api function.'; code = 'gateway';
+    } else { msg = 'The server had a problem (' + status + '). Try again in a moment.'; code = 'server'; }
+    var e = new Error(msg); e.status = status; e.code = code;
+    return e;
+  }
+
+  // ---------------------------------------------------------------- accounts
+  // Make an account. The save on this device is uploaded with it.
+  Api.signup = function (username, password, displayName) {
+    return request('POST', '/auth/signup', { username: username, password: password, displayName: displayName || undefined, save: S().exportSave() })
+      .then(function (r) {
+        setSession(r);
+        if (r.save) S().applyServerSave(r.save);
+        Api.lastSync = Date.now(); dirty = false;
+        setStatus('ok');
+        return r.account;
+      });
+  };
+
+  // Log in, then merge this device's save with the account's (neither side loses progress).
+  Api.login = function (username, password) {
+    return request('POST', '/auth/login', { username: username, password: password }).then(function (r) {
+      setSession(r);
+      emit();
+      return Api.syncNow().then(function () { return r.account; });
+    });
+  };
+
+  Api.logout = function (all) {
+    var done = function () { clearSession(''); };
+    // Even if the server cannot be reached, this device is logged out.
+    return request('POST', '/auth/logout', { all: !!all }).then(done, done);
+  };
+
+  Api.rename = function (displayName) {
+    return request('PUT', '/me', { displayName: displayName }).then(function (r) {
+      session.account = r.account; saveSession(); emit();
+      return r.account;
+    });
+  };
+
+  Api.changePassword = function (oldPassword, newPassword) {
+    return request('POST', '/auth/password', { oldPassword: oldPassword, newPassword: newPassword });
+  };
+
+  Api.deleteAccount = function (password) {
+    return request('DELETE', '/me', { password: password }).then(function () { clearSession('Your account was deleted.'); });
+  };
+
+  // ---------------------------------------------------------------- syncing the save
+  /* Send this device's save. The server merges it with the account's and answers with the result,
+     which we then merge back in. Safe to call any time; calls made while one is running are joined. */
+  Api.syncNow = function () {
+    if (!session) return Promise.resolve();
+    if (syncing) { again = true; return pending; }
+    syncing = true;
+    setStatus('syncing');
+    pending = request('PUT', '/save', { save: S().exportSave() }).then(function (r) {
+      S().applyServerSave(r.save);
+      Api.lastSync = Date.now(); dirty = false;
+      setStatus('ok');
+    }).catch(syncFailed).then(function () {
+      syncing = false;
+      if (again) { again = false; return Api.syncNow(); }
+    });
+    return pending;
+  };
+
+  function syncFailed(e) {
+    if (e.status === 401 && e.code === 'unauthorized') return clearSession('Your login ended. Please log in again.');
+    if (e.code === 'too_many_icons') return setStatus('conflict', e.message);
+    if (e.code === 'network') return setStatus('offline', e.message);
+    setStatus('error', e.message);
+  }
+
+  // Throw away this device's progress and use the account's copy instead (the fix for a "conflict").
+  Api.useOnlineCopy = function () {
+    return request('GET', '/save').then(function (r) {
+      S().applyServerSave(r.save, true);
+      Api.lastSync = Date.now(); dirty = false;
+      setStatus('ok');
+    }).catch(syncFailed);
+  };
+
+  // ---------------------------------------------------------------- automatic syncing
+  // After the game saves something, sync a few seconds later (several changes become one sync).
+  Api.init = function () {
+    S().afterWrite = function () {
+      if (!session) return;
+      dirty = true;
+      clearTimeout(timer);
+      timer = setTimeout(Api.syncNow, 15000);
+    };
+    // When the tab is hidden or closed, send anything that has not been sent yet.
+    root.document.addEventListener('visibilitychange', function () {
+      if (root.document.hidden && session && dirty && !syncing) {
+        request('PUT', '/save', { save: S().exportSave() }, true).catch(function () { /* will try again next time */ });
+      }
+    });
+    root.addEventListener('online', function () { if (session && (dirty || Api.status === 'offline')) Api.syncNow(); });
+    // Catch up shortly after the game opens.
+    if (session) setTimeout(Api.syncNow, 1500);
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+  <script>
 /* js/game.js */
 /* ==========================================================================
    game.js
@@ -2981,6 +3295,8 @@ PD.SONG_CREDITS = [];
   var PD = root.PD, R = PD.Render, A = PD.Audio;
 
   var canvas, ctx, W = 0, H = 0, dpr = 1, u = 40;     // u = pixels per block.
+  // Settings: low performance mode makes the game cheaper to draw, and the FPS text shows frames per second.
+  var lowPerf = false, fpsOn = false, fpsEl = null, fpsFrames = 0, fpsStart = 0;
   var state = 'idle', paused = false;
   var level = null, sim = null, opts = {};
   var hold = false;                 // Is the jump button down right now?
@@ -3037,11 +3353,26 @@ PD.SONG_CREDITS = [];
     });
 
     last = performance.now();
+    G.applySettings();
     requestAnimationFrame(loop);
   };
 
+  /* Read the settings and apply them. Called at start and whenever a setting changes.
+     Low performance mode: draw at normal pixel density (never double), use a simple background,
+     make fewer particles, and turn off the menu animations. */
+  G.applySettings = function () {
+    var st = PD.Save.get().settings;
+    lowPerf = !!st.lowPerf; fpsOn = !!st.showFps;
+    R.lowPerf = lowPerf;
+    root.document.body.classList.toggle('low-perf', lowPerf);
+    fpsEl = fpsEl || root.document.getElementById('fps');
+    if (fpsEl) { fpsEl.classList.toggle('hidden', !fpsOn); fpsEl.textContent = 'FPS: ...'; }
+    fpsFrames = 0; fpsStart = 0;
+    if (canvas) resize();
+  };
+
   function resize() {
-    dpr = Math.min(2, root.devicePixelRatio || 1);
+    dpr = lowPerf ? 1 : Math.min(2, root.devicePixelRatio || 1);
     W = root.innerWidth; H = root.innerHeight;
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     // Show about 11 blocks top to bottom, but never fewer than 15 across.
@@ -3134,6 +3465,14 @@ PD.SONG_CREDITS = [];
   // ------------------------------------------------------------------------
   function loop(now) {
     requestAnimationFrame(loop);
+    if (fpsOn && fpsEl) {                     // Count frames and update the FPS text twice a second.
+      if (!fpsStart) fpsStart = now;
+      fpsFrames++;
+      if (now - fpsStart >= 500) {
+        fpsEl.textContent = 'FPS: ' + Math.round(fpsFrames * 1000 / (now - fpsStart));
+        fpsFrames = 0; fpsStart = now;
+      }
+    }
     var dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     if (state === 'off') return;
@@ -3272,6 +3611,7 @@ PD.SONG_CREDITS = [];
   // Particles
   // ------------------------------------------------------------------------
   function burst(x, y, n, col, speed, life) {
+    if (lowPerf) n = Math.max(1, Math.round(n * 0.35));   // Fewer particles in low performance mode.
     for (var i = 0; i < n; i++) {
       var a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7);
       parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, life: life * (0.6 + Math.random() * 0.6),
@@ -3287,7 +3627,7 @@ PD.SONG_CREDITS = [];
       trail.push(sim.x, sim.y);
       if (trail.length > 400) trail.splice(0, 2);
     } else if (trail.length) trail.length = 0;
-    if (trailClock < 0.03) return;
+    if (trailClock < (lowPerf ? 0.08 : 0.03)) return;
     trailClock = 0;
     var half = sim.half();
     if (sim.mode === 'ship' || sim.mode === 'ufo') {
@@ -4279,10 +4619,232 @@ PD.SONG_CREDITS = [];
   // ------------------------------------------------------------------------
   // Settings
   // ------------------------------------------------------------------------
+  var setTab = 'general';     // Which Settings tab is showing.
+
+  function setSwitch(btn, on) { btn.setAttribute('aria-checked', on ? 'true' : 'false'); }
+
   function renderSettings() {
     var st = S.get().settings;
     $('set-music').value = st.music;
     $('set-sfx').value = st.sfx;
+    setSwitch($('set-lowperf'), st.lowPerf);
+    setSwitch($('set-fps'), st.showFps);
+    showSetTab(setTab);
+  }
+
+  function showSetTab(name) {
+    setTab = name;
+    $('set-general').classList.toggle('hidden', name !== 'general');
+    $('set-account').classList.toggle('hidden', name !== 'account');
+    document.querySelectorAll('#screen-settings .set-tabs .tab').forEach(function (b) {
+      b.classList.toggle('sel', b.getAttribute('data-tab') === name);
+    });
+    if (name === 'account') renderAccount();
+  }
+
+  // ---------------- Account tab ----------------
+  var acctMode = 'login';          // 'login' or 'signup' while logged out
+  var acctRenderedIn = null;       // Whether the panel was last drawn logged in or out
+  var statusEl = null, onlineCopyBtn = null, nameEl = null;
+
+  // A labelled text box. Returns { wrap, input }.
+  function field(label, type, autocomplete, max, value) {
+    var wrap = el('label', 'acct-field');
+    wrap.appendChild(el('span', '', label));
+    var input = document.createElement('input');
+    input.type = type; input.className = 'text'; input.autocomplete = autocomplete;
+    input.maxLength = max; input.spellcheck = false; input.autocapitalize = 'off';
+    if (value) input.value = value;
+    wrap.appendChild(input);
+    return { wrap: wrap, input: input };
+  }
+
+  // A line of feedback under a form. say('error' | 'ok', text) shows it.
+  function messageLine() {
+    var line = el('div', 'acct-msg');
+    line.say = function (kind, text) { line.className = 'acct-msg ' + (kind || ''); line.textContent = text || ''; };
+    return line;
+  }
+
+  // Run a promise-returning action while a button is disabled, and show the result on a message line.
+  function busy(btn, line, work, okText) {
+    btn.disabled = true; line.say('', 'Working...');
+    work().then(function () { line.say('ok', okText || ''); },
+                function (e) { line.say('error', e.message); })
+      .then(function () { btn.disabled = false; });
+  }
+
+  function ago(ts) {
+    var s = Math.round((Date.now() - ts) / 1000);
+    if (s < 10) return 'just now';
+    if (s < 60) return s + ' seconds ago';
+    if (s < 3600) return Math.round(s / 60) + ' minutes ago';
+    return Math.round(s / 3600) + ' hours ago';
+  }
+
+  function statusText() {
+    var A2 = PD.Api;
+    if (A2.status === 'syncing') return 'Syncing...';
+    if (A2.status === 'ok') return 'Saved online ' + ago(A2.lastSync) + '.';
+    if (A2.status === 'offline') return A2.statusText + ' Your progress is safe on this device and will sync later.';
+    if (A2.status === 'conflict') return 'This device and your account do not match: ' + A2.statusText + '.';
+    if (A2.status === 'error') return 'Could not sync: ' + A2.statusText;
+    return 'Not synced yet.';
+  }
+
+  // Called when login or sync state changes. Only redraw everything if login changed, so typing is never wiped.
+  function refreshAccount() {
+    if (acctRenderedIn !== PD.Api.loggedIn()) return renderAccount();
+    if (statusEl) statusEl.textContent = statusText();
+    if (nameEl && PD.Api.account()) nameEl.textContent = PD.Api.account().displayName;   // After a rename.
+    if (onlineCopyBtn) onlineCopyBtn.classList.toggle('hidden', PD.Api.status !== 'conflict');
+  }
+
+  function renderAccount() {
+    var box = $('set-account'); box.textContent = '';
+    statusEl = null; onlineCopyBtn = null; nameEl = null;
+    acctRenderedIn = PD.Api.loggedIn();
+    if (acctRenderedIn) renderAccountIn(box); else renderAccountOut(box);
+  }
+
+  // ----- Logged out: log in or make an account -----
+  function renderAccountOut(box) {
+    box.appendChild(el('div', 'sub', 'Sign in to save your progress online. Your icons, balls, beaten levels and achievements will follow you to any device. You can also keep playing without an account.'));
+    var modes = el('div', 'set-tabs');
+    [['login', 'Log in'], ['signup', 'Create account']].forEach(function (m) {
+      var b = el('button', 'tab' + (acctMode === m[0] ? ' sel' : ''), m[1]);
+      b.type = 'button';
+      b.onclick = function () { acctMode = m[0]; renderAccount(); };
+      modes.appendChild(b);
+    });
+    box.appendChild(modes);
+
+    var signup = acctMode === 'signup';
+    var form = document.createElement('form'); form.className = 'acct-form';
+    var user = field('Username', 'text', 'username', 20);
+    var name = field('Display name (optional)', 'text', 'nickname', 24);
+    var pass = field('Password', 'password', signup ? 'new-password' : 'current-password', 128);
+    var pass2 = field('Repeat password', 'password', 'new-password', 128);
+    form.appendChild(user.wrap);
+    if (signup) form.appendChild(name.wrap);
+    form.appendChild(pass.wrap);
+    if (signup) form.appendChild(pass2.wrap);
+    if (signup) form.appendChild(el('div', 'sub', 'Usernames are 3 to 20 letters, numbers or underscores. Passwords need at least 8 characters. There is no email, so there is no password reset: keep it somewhere safe.'));
+    var submit = el('button', 'btn green', signup ? 'Create account' : 'Log in');
+    submit.type = 'submit';
+    var line = messageLine();
+    form.appendChild(submit); form.appendChild(line);
+    form.onsubmit = function (e) {
+      e.preventDefault();
+      var u2 = user.input.value.trim(), p = pass.input.value;
+      if (!/^[A-Za-z0-9_]{3,20}$/.test(u2)) return line.say('error', 'Usernames are 3 to 20 letters, numbers or underscores.');
+      if (signup) {
+        if (p.length < 8) return line.say('error', 'Passwords need at least 8 characters.');
+        if (p !== pass2.input.value) return line.say('error', 'The two passwords do not match.');
+      } else if (!p) return line.say('error', 'Type your password.');
+      busy(submit, line, function () {
+        return signup ? PD.Api.signup(u2, p, name.input.value.trim()) : PD.Api.login(u2, p);
+      });
+    };
+    box.appendChild(form);
+  }
+
+  // ----- Logged in: who you are, sync, and account settings -----
+  function renderAccountIn(box) {
+    var acc = PD.Api.account(), save = S.get();
+    var who = el('div', 'acct-id');
+    nameEl = el('div', 'acct-name', acc.displayName);
+    who.appendChild(nameEl);
+    who.appendChild(el('div', 'sub', '@' + acc.username + (acc.isAdmin ? '  |  Admin' : '') +
+      '  |  Joined ' + new Date(acc.createdAt).toLocaleDateString()));
+    var beaten = Object.keys(save.progress).filter(function (k) { return save.progress[k].done; }).length;
+    who.appendChild(el('div', 'sub', beaten + ' levels beaten  |  ' + Object.keys(save.owned).length + ' icons bought  |  ' +
+      PD.Achievements.unlockedCount() + ' / ' + PD.Achievements.LIST.length + ' achievements'));
+    box.appendChild(who);
+
+    // Sync status
+    var sync = el('div', 'acct-section');
+    statusEl = el('div', 'sub', statusText());
+    var row = el('div', 'row');
+    var syncBtn = el('button', 'btn blue', 'Sync now');
+    syncBtn.onclick = function () { PD.Api.syncNow(); };
+    onlineCopyBtn = el('button', 'btn red' + (PD.Api.status === 'conflict' ? '' : ' hidden'), 'Use my online copy');
+    onlineCopyBtn.onclick = function () {
+      UI.modal('Use the online copy?', el('div', 'sub', 'This device\'s progress will be replaced by what your account has saved.'), [
+        { text: 'Cancel' }, { text: 'Replace', cls: 'red', fn: function () { PD.Api.useOnlineCopy(); } }
+      ]);
+    };
+    row.appendChild(syncBtn); row.appendChild(onlineCopyBtn);
+    sync.appendChild(statusEl); sync.appendChild(row);
+    box.appendChild(sync);
+
+    // Display name
+    var nameSec = el('div', 'acct-section');
+    nameSec.appendChild(el('h3', '', 'Display name'));
+    var nameForm = document.createElement('form'); nameForm.className = 'inline';
+    var nm = field('', 'text', 'nickname', 24, acc.displayName);
+    nm.wrap.className = 'acct-field grow';
+    var nameBtn = el('button', 'btn blue', 'Save'); nameBtn.type = 'submit';
+    var nameLine = messageLine();
+    nameForm.appendChild(nm.wrap); nameForm.appendChild(nameBtn);
+    nameForm.onsubmit = function (e) {
+      e.preventDefault();
+      var v = nm.input.value.trim();
+      if (!v) return nameLine.say('error', 'Type a name.');
+      busy(nameBtn, nameLine, function () { return PD.Api.rename(v); }, 'Saved!');
+    };
+    nameSec.appendChild(nameForm); nameSec.appendChild(nameLine);
+    box.appendChild(nameSec);
+
+    // Password
+    var pwSec = el('div', 'acct-section');
+    pwSec.appendChild(el('h3', '', 'Change password'));
+    var pwForm = document.createElement('form'); pwForm.className = 'acct-form';
+    var oldPw = field('Current password', 'password', 'current-password', 128);
+    var newPw = field('New password', 'password', 'new-password', 128);
+    var pwBtn = el('button', 'btn blue', 'Change password'); pwBtn.type = 'submit';
+    var pwLine = messageLine();
+    pwForm.appendChild(oldPw.wrap); pwForm.appendChild(newPw.wrap); pwForm.appendChild(pwBtn); pwForm.appendChild(pwLine);
+    pwForm.onsubmit = function (e) {
+      e.preventDefault();
+      if (newPw.input.value.length < 8) return pwLine.say('error', 'New passwords need at least 8 characters.');
+      busy(pwBtn, pwLine, function () {
+        return PD.Api.changePassword(oldPw.input.value, newPw.input.value).then(function () { oldPw.input.value = ''; newPw.input.value = ''; });
+      }, 'Password changed. Your other devices were logged out.');
+    };
+    pwSec.appendChild(pwForm);
+    box.appendChild(pwSec);
+
+    // Log out and delete
+    var outSec = el('div', 'acct-section');
+    var outRow = el('div', 'row');
+    var outBtn = el('button', 'btn', 'Log out');
+    outBtn.onclick = function () { PD.Api.syncNow().then(function () { return PD.Api.logout(false); }); };
+    var allBtn = el('button', 'btn', 'Log out everywhere');
+    allBtn.onclick = function () { PD.Api.logout(true); };
+    var delBtn = el('button', 'btn red', 'Delete account');
+    delBtn.onclick = function () { askDeleteAccount(); };
+    outRow.appendChild(outBtn); outRow.appendChild(allBtn); outRow.appendChild(delBtn);
+    outSec.appendChild(outRow);
+    box.appendChild(outSec);
+  }
+
+  // Deleting an account needs the password. It also deletes the account's levels and progress online.
+  function askDeleteAccount() {
+    var body = el('div', 'acct-form');
+    body.appendChild(el('div', 'sub', 'This permanently deletes your account, its online progress and the levels you published. The save on this device stays.'));
+    var pw = field('Password', 'password', 'current-password', 128);
+    var line = messageLine();
+    body.appendChild(pw.wrap); body.appendChild(line);
+    UI.modal('Delete your account?', body, [
+      { text: 'Cancel' },
+      { text: 'Delete', cls: 'red', fn: function () {
+        line.say('', 'Working...');
+        PD.Api.deleteAccount(pw.input.value).then(function () { $('overlay-modal').classList.add('hidden'); },
+                                                  function (e) { line.say('error', e.message); });
+        return false;      // Keep the box open until the server answers.
+      } }
+    ]);
   }
 
   // ------------------------------------------------------------------------
@@ -4426,11 +4988,34 @@ PD.SONG_CREDITS = [];
     $('set-sfx').oninput = function () { vols(); };
     $('set-sfx').onchange = function () { A.sfx('orb'); };
     $('set-reset').onclick = function () {
-      UI.modal('Erase everything?', el('div', 'sub', 'Your progress, icons and your own levels will be deleted.'), [
+      var body = el('div', 'sub', 'Your progress, icons and your own levels on THIS device will be deleted.' +
+        (PD.Api.loggedIn() ? ' Your online account keeps its own copy, and it comes back the next time you sync.' : ''));
+      UI.modal('Erase everything?', body, [
         { text: 'Cancel' },
-        { text: 'Erase', cls: 'red', fn: function () { S.reset(); renderSettings(); A.setVolume(0.7, 0.8); } }
+        { text: 'Erase', cls: 'red', fn: function () { S.reset(); renderSettings(); A.setVolume(0.7, 0.8); PD.Game.applySettings(); } }
       ]);
     };
+
+    // Low performance mode and the FPS counter
+    $('set-lowperf').onclick = function () {
+      var st = S.get().settings; st.lowPerf = !st.lowPerf; S.write();
+      setSwitch(this, st.lowPerf); PD.Game.applySettings();
+    };
+    $('set-fps').onclick = function () {
+      var st = S.get().settings; st.showFps = !st.showFps; S.write();
+      setSwitch(this, st.showFps); PD.Game.applySettings();
+    };
+
+    // The Settings tabs
+    document.querySelectorAll('#screen-settings .set-tabs .tab').forEach(function (b) {
+      b.onclick = function () { showSetTab(b.getAttribute('data-tab')); };
+    });
+
+    // Online account: start syncing, and redraw the Account tab when login or sync state changes.
+    PD.Api.init();
+    PD.Api.onChange(function () {
+      if (!$('screen-settings').classList.contains('hidden') && setTab === 'account') refreshAccount();
+    });
 
     // My levels
     $('cl-new').onclick = function () { PD.Editor.open(PD.blankLevel()); };
