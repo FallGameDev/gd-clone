@@ -443,6 +443,63 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
   .card { padding: 14px; gap: 8px; }
 }
 
+
+/* ==========================================================================
+   Level Hub (opened by the Create button on the main menu)
+   A page of square buttons, plus the Saved, Event, Featured, Map Packs and
+   Search screens. Same chunky pop look as the rest of the game.
+   ========================================================================== */
+.hub-grid {
+  display: grid; grid-template-columns: repeat(3, auto); gap: clamp(14px, 3vw, 30px);
+  margin: auto; justify-content: center; align-content: center;
+}
+/* Square buttons with a name under the icon */
+.hub-grid .btn.square.hubbtn {
+  --sq: clamp(92px, min(24vw, 27vh), 176px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.hubbtn .ico { width: 54%; height: 54%; }
+.hubbtn span { font-size: clamp(13px, 2.4vw, 20px); line-height: 1; }
+
+/* Little colored badge that shows a level's difficulty */
+.diff-badge {
+  border: 3px solid var(--ink); border-radius: 999px; padding: 2px 12px; font-weight: 700;
+  font-size: 13px; color: var(--ink); box-shadow: 0 3px 0 var(--ink); white-space: nowrap;
+}
+.diff-badge.d-easy { background: var(--green); }
+.diff-badge.d-normal { background: var(--blue); }
+.diff-badge.d-hard { background: var(--yellow); }
+.diff-badge.d-harder { background: var(--red); color: #fff; }
+
+/* Search form */
+.hub-input {
+  flex: 1; min-width: 140px; font: inherit; font-weight: 700; color: var(--text); background: var(--ink);
+  border: 4px solid var(--ink); border-radius: 14px; padding: 8px 12px;
+  -webkit-user-select: text; user-select: text;
+}
+.hub-input::placeholder { color: var(--muted); }
+.hub-label { margin: 10px 0 4px; font-weight: 700; color: var(--muted); font-size: 14px; }
+.hub-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.hub-chips .tab { font-size: 14px; padding: 4px 12px; }
+.hub-note {
+  background: var(--ink); border-radius: 12px; padding: 8px 12px; margin: 10px 0 0;
+  color: var(--yellow); font-size: 14px; text-align: center;
+}
+#screen-search .level-list, #screen-featured .level-list, #screen-saved .level-list,
+#screen-packs .level-list { margin-top: 12px; }
+.hub-more { display: block; margin: 14px auto 0; }
+.hub-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hub-top .sub { color: var(--muted); font-weight: 700; }
+
+/* Event screen */
+.hub-event { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.hub-event .tag {
+  background: var(--red); color: #fff; border: 4px solid var(--ink); border-radius: 999px;
+  padding: 2px 18px; font-weight: 700; box-shadow: 0 4px 0 var(--ink);
+}
+.hub-event .big-name { font-size: clamp(28px, 6vw, 44px); font-weight: 700; text-shadow: 0 4px 0 var(--ink); }
+.hub-event p { margin: 0; color: var(--muted); }
+.hub-event .level-row { width: 100%; text-align: left; }
 </style>
 </head>
 <body>
@@ -494,7 +551,7 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
           </svg>
         </button>
 
-        <button class="btn square blue" data-go="custom" aria-label="Create" title="Create">
+        <button class="btn square blue" data-go="createhub" aria-label="Create" title="Create">
           <!-- Hammer icon -->
           <svg class="ico" viewBox="0 0 100 100" aria-hidden="true">
             <g transform="rotate(45 50 50)">
@@ -664,13 +721,121 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
 
   <!-- ================= My levels ================= -->
   <section id="screen-custom" class="screen hidden">
-    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>My Levels</h2><span></span></header>
+    <header class="bar"><button class="btn" data-go="createhub">Back</button><h2>My Levels</h2><span></span></header>
     <div class="card wide">
       <div class="row">
         <button id="cl-new" class="btn green">New Level</button>
         <button id="cl-import" class="btn blue">Import</button>
       </div>
       <div id="cl-list" class="level-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= Level Hub (square buttons) ================= -->
+  <section id="screen-createhub" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>Level Hub</h2><span></span></header>
+    <div class="hub-grid">
+      <!-- Create: opens the custom level menu (My Levels) -->
+      <button class="btn square hubbtn blue" data-go="custom" aria-label="Create" title="Create">
+        <svg class="ico" viewBox="0 0 100 100" aria-hidden="true">
+          <g transform="rotate(45 50 50)">
+            <rect x="41" y="30" width="18" height="58" rx="7" fill="#ffffff"/>
+            <rect x="24" y="12" width="52" height="24" rx="7" fill="#ffe14d"/>
+          </g>
+        </svg>
+        <span>Create</span>
+      </button>
+      <!-- Saved: online levels you played recently -->
+      <button class="btn square hubbtn pink" data-go="saved" aria-label="Saved" title="Saved">
+        <svg class="ico" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M28 12 H72 V88 L50 70 L28 88 Z" fill="#ffe14d"/>
+        </svg>
+        <span>Saved</span>
+      </button>
+      <!-- Event: the one level FallGameDev picked -->
+      <button class="btn square hubbtn red" data-go="event" aria-label="Event" title="Event">
+        <svg class="ico" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M28 12 V90" fill="none"/>
+          <path d="M28 16 H80 L68 34 L80 52 H28 Z" fill="#ffe14d"/>
+        </svg>
+        <span>Event</span>
+      </button>
+      <!-- Featured: list of levels FallGameDev picked -->
+      <button class="btn square hubbtn yellow" data-go="featured" aria-label="Featured" title="Featured">
+        <svg class="ico" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M50 8 L62 37 L93 39 L69 59 L77 90 L50 73 L23 90 L31 59 L7 39 L38 37 Z" fill="#ffffff"/>
+        </svg>
+        <span>Featured</span>
+      </button>
+      <!-- Map Packs: tabs of picked levels -->
+      <button class="btn square hubbtn green" data-go="packs" aria-label="Map Packs" title="Map Packs">
+        <svg class="ico" viewBox="0 0 100 100" aria-hidden="true">
+          <rect x="32" y="12" width="56" height="46" rx="8" fill="#4dd2ff"/>
+          <rect x="22" y="24" width="56" height="46" rx="8" fill="#ff6ad5"/>
+          <rect x="12" y="36" width="56" height="46" rx="8" fill="#ffe14d"/>
+        </svg>
+        <span>Map Packs</span>
+      </button>
+      <!-- Search: find online levels by category -->
+      <button class="btn square hubbtn" data-go="search" aria-label="Search" title="Search">
+        <svg class="ico" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="42" cy="42" r="26" fill="#4dd2ff"/>
+          <path d="M62 62 L86 86" fill="none"/>
+        </svg>
+        <span>Search</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ================= Saved (recent online levels) ================= -->
+  <section id="screen-saved" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="createhub">Back</button><h2>Saved</h2><span></span></header>
+    <div class="card wide">
+      <div class="hub-top"><span class="sub">Online levels you played recently</span><button id="sv-clear" class="btn red">Clear</button></div>
+      <div id="sv-list" class="level-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= Event ================= -->
+  <section id="screen-event" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="createhub">Back</button><h2>Event</h2><span></span></header>
+    <div class="card wide"><div id="ev-box" class="hub-event"></div></div>
+  </section>
+
+  <!-- ================= Featured ================= -->
+  <section id="screen-featured" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="createhub">Back</button><h2>Featured</h2><span></span></header>
+    <div class="card wide">
+      <div id="ft-note"></div>
+      <div id="ft-list" class="level-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= Map Packs ================= -->
+  <section id="screen-packs" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="createhub">Back</button><h2>Map Packs</h2><span></span></header>
+    <div class="card wide">
+      <div id="mp-tabs" class="hub-chips"></div>
+      <div id="mp-note"></div>
+      <div id="mp-info" class="hub-label"></div>
+      <div id="mp-list" class="level-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= Search ================= -->
+  <section id="screen-search" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="createhub">Back</button><h2>Search</h2><span></span></header>
+    <div class="card wide">
+      <div class="row">
+        <input id="hs-q" class="hub-input" type="text" maxlength="40" placeholder="Level name, creator or ID" autocomplete="off">
+        <button id="hs-go" class="btn green">Search</button>
+      </div>
+      <div class="hub-label">Sort by</div><div id="hs-sort" class="hub-chips"></div>
+      <div class="hub-label">Difficulty</div><div id="hs-diff" class="hub-chips"></div>
+      <div class="hub-label">Length</div><div id="hs-len" class="hub-chips"></div>
+      <div id="hs-note"></div>
+      <div id="hs-list" class="level-list"></div>
+      <button id="hs-more" class="btn blue hub-more hidden">Load more</button>
     </div>
   </section>
 
@@ -4327,7 +4492,7 @@ PD.SONG_CREDITS = [];
   'use strict';
   var PD = root.PD, A = PD.Audio, S = PD.Save, G = PD.Game, R = PD.Render;
 
-  var SCREENS = ['menu', 'levels', 'icons', 'shop', 'achievements', 'settings', 'credits', 'custom', 'editor'];
+  var SCREENS = ['menu', 'levels', 'icons', 'shop', 'achievements', 'settings', 'credits', 'custom', 'editor', 'createhub', 'saved', 'event', 'featured', 'packs', 'search'];
   var current = 'menu';
   var levelIdx = 0;          // Which built-in level the carousel is showing.
   var playing = null;        // { data, practice, test, from } while a level runs.
@@ -4358,6 +4523,7 @@ PD.SONG_CREDITS = [];
     if (name === 'settings') renderSettings();
     if (name === 'custom') renderCustom();
     if (name === 'credits') renderCredits();
+    if (PD.Hub && PD.Hub.onShow) PD.Hub.onShow(name);   // Level Hub screens (js/hub.js)
   };
 
   // ------------------------------------------------------------------------
@@ -6529,6 +6695,418 @@ PD.registerLevel({
     {"t":"spike","x":1398,"y":0}
   ]
 });
+
+</script>
+  <script>
+/* js/hub.js */
+/* ==========================================================================
+   hub.js
+   The Level Hub: the page of square buttons you reach from the Create button
+   on the main menu, plus the screens behind it:
+     Create    -> the custom level menu (My Levels), already in ui.js
+     Saved     -> online levels you played recently (kept in this browser)
+     Event     -> one level that FallGameDev picked
+     Featured  -> a list of levels FallGameDev picked
+     Map Packs -> tabs, each one a pack of levels FallGameDev picked
+     Search    -> online levels by most downloads, most liked, trending,
+                  recent, difficulty and length
+
+   HOW TO PICK LEVELS: edit Hub.CONFIG below. Use the level IDs from your
+   Supabase levels table.
+
+   WHAT THE SERVER SHOULD ANSWER (edit Online below if yours is different):
+     GET {Api.BASE}/levels?sort=&difficulty=&length=&q=&limit=&offset=
+         -> an array, or { levels: [...] }
+     GET {Api.BASE}/levels?ids=a,b,c  -> the same, for specific IDs
+     GET {Api.BASE}/levels/<id>       -> one level, with its code in .data
+   Each level: { id, name, author, difficulty, length, downloads, likes,
+                 createdAt, data }   (data is the same level code as Export)
+   If the server cannot be reached, the hub shows SAMPLE levels so you can
+   test the screens. A yellow note tells the player when that happens.
+   ========================================================================== */
+(function (root) {
+  'use strict';
+  var PD = root.PD, UI = PD.UI, S = PD.Save, G = PD.Game, el = UI.el;
+  var Hub = PD.Hub = {};
+
+  function $(id) { return document.getElementById(id); }
+
+  // ------------------------------------------------------------------------
+  // CONFIG: the levels YOU pick (these IDs match the SAMPLE levels below,
+  // swap them for real level IDs from your database)
+  // ------------------------------------------------------------------------
+  Hub.CONFIG = {
+    // The Event screen shows exactly one level.
+    event: {
+      title: 'Level of the Week',
+      blurb: 'Picked by FallGameDev. Can you beat it?',
+      levelId: 's4',
+      endsAt: null            // Optional end date, like '2026-12-01T00:00:00Z'. null hides the countdown.
+    },
+    // The Featured list, top to bottom.
+    featured: ['s4', 's1', 's2', 's7', 's3'],
+    // Map packs: each one becomes a tab.
+    packs: [
+      { name: 'Starter Pack', levels: ['s11', 's1', 's5', 's6'] },
+      { name: 'Neon Pack',    levels: ['s2', 's7', 's12'] },
+      { name: 'Hard Pack',    levels: ['s3', 's8', 's9', 's4', 's10'] }
+    ]
+  };
+
+  // ------------------------------------------------------------------------
+  // Words and sorting options
+  // ------------------------------------------------------------------------
+  var DIFFS = ['easy', 'normal', 'hard', 'harder'];
+  var DIFF_LABEL = { easy: 'Easy', normal: 'Normal', hard: 'Hard', harder: 'Harder' };
+  var LENS = ['tiny', 'short', 'medium', 'long', 'xl'];
+  var LEN_LABEL = { tiny: 'Tiny', short: 'Short', medium: 'Medium', long: 'Long', xl: 'XL' };
+  var SORTS = [
+    ['downloads', 'Most Downloads'], ['likes', 'Most Liked'],
+    ['trending', 'Trending'], ['recent', 'Recent']
+  ];
+
+  // ------------------------------------------------------------------------
+  // SAMPLE levels (only used when the server cannot be reached)
+  // They play the built-in levels so you can test everything.
+  // ------------------------------------------------------------------------
+  function daysAgo(d) { return new Date(Date.now() - d * 86400000).toISOString(); }
+  function mk(id, name, author, diff, len, dl, likes, age) {
+    return { id: id, name: name, author: author, difficulty: diff, length: len,
+             downloads: dl, likes: likes, createdAt: daysAgo(age), sample: true };
+  }
+  var SAMPLE = [
+    mk('s1',  'Starlight Sprint', 'FallGameDev', 'easy',   'short',  5200, 1480, 40),
+    mk('s2',  'Neon Tide Remix',  'FallGameDev', 'normal', 'medium', 4100, 1210, 25),
+    mk('s3',  'Comet Crash',      'Eddie',       'hard',   'long',   3300,  900, 12),
+    mk('s4',  'Abyss Echo',       'FallGameDev', 'harder', 'long',   2800, 1500,  6),
+    mk('s5',  'Tiny Hops',        'PixelPaws',   'easy',   'tiny',   1900,  410,  3),
+    mk('s6',  'Spike City',       'Nugget',      'normal', 'short',  2400,  600, 18),
+    mk('s7',  'Ship Shape',       'Lucky',       'normal', 'medium', 1700,  520,  9),
+    mk('s8',  'Wave Rider',       'BeanFan',     'hard',   'medium', 1500,  640,  2),
+    mk('s9',  'Marathon Mania',   'Eddie',       'hard',   'xl',      900,  300, 30),
+    mk('s10', 'Robo Rush',        'PixelPaws',   'harder', 'xl',      600,  450,  1),
+    mk('s11', 'Chill Cube',       'Nugget',      'easy',   'short',  3500,  700, 60),
+    mk('s12', 'Gravity Flip',     'Lucky',       'normal', 'long',   1200,  380, 14)
+  ];
+
+  // ------------------------------------------------------------------------
+  // Online: all the talking to the server lives here
+  // ------------------------------------------------------------------------
+  var Online = Hub.Online = {};
+  Online.PAGE = 12;           // How many results per page.
+  Online.usingSamples = false;  // True when the last request fell back to samples.
+
+  // One plain GET request. Resolves with the JSON, rejects on any problem.
+  function get(path) {
+    var ctl = root.AbortController ? new root.AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 10000) : null;
+    return root.fetch(PD.Api.BASE + path, { signal: ctl ? ctl.signal : undefined }).then(function (res) {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('server ' + res.status);
+      return res.json();
+    }, function (e) { clearTimeout(timer); throw e; });
+  }
+
+  // Turn whatever the server sent into one tidy shape the screens can trust.
+  function norm(r) {
+    var d = String(r.difficulty == null ? '' : r.difficulty).toLowerCase();
+    if (DIFFS.indexOf(d) < 0) d = DIFFS[Number(d) - 1] || 'normal';     // Also accept 1 to 4.
+    var l = String(r.length == null ? '' : r.length).toLowerCase();
+    if (LENS.indexOf(l) < 0) l = 'medium';
+    return {
+      id: String(r.id),
+      name: String(r.name || 'Untitled').slice(0, 24),
+      author: String(r.author || r.authorName || r.creator || 'Unknown').slice(0, 20),
+      difficulty: d, length: l,
+      downloads: Number(r.downloads) || 0, likes: Number(r.likes) || 0,
+      createdAt: r.createdAt || r.created_at || null,
+      data: r.data || r.level || null,
+      sample: !!r.sample
+    };
+  }
+  function listFrom(res) { return (Array.isArray(res) ? res : (res && res.levels) || []).map(norm); }
+
+  // Sorting and filtering done here, used for the sample levels.
+  function trendScore(e) {
+    var age = Math.max(0, (Date.now() - new Date(e.createdAt || Date.now()).getTime()) / 86400000);
+    return (e.downloads + e.likes * 3) / Math.pow(age + 2, 0.8);
+  }
+  function localSearch(o) {
+    var q = (o.q || '').toLowerCase(), out = SAMPLE.filter(function (e) {
+      if (o.diffs.length && o.diffs.indexOf(e.difficulty) < 0) return false;
+      if (o.length !== 'any' && e.length !== o.length) return false;
+      if (q && (e.name + ' ' + e.author + ' ' + e.id).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).map(norm);
+    out.sort(function (a, b) {
+      if (o.sort === 'likes') return b.likes - a.likes;
+      if (o.sort === 'trending') return trendScore(b) - trendScore(a);
+      if (o.sort === 'recent') return new Date(b.createdAt) - new Date(a.createdAt);
+      return b.downloads - a.downloads;
+    });
+    return out;
+  }
+
+  /* Search the online levels.
+     o = { sort, diffs: ['easy'...], length: 'any'|'short'..., q, page }
+     Resolves with { levels, more } and sets Online.usingSamples. */
+  Online.search = function (o) {
+    var qs = 'sort=' + encodeURIComponent(o.sort) + '&limit=' + (Online.PAGE + 1) + '&offset=' + (o.page * Online.PAGE);
+    if (o.diffs.length) qs += '&difficulty=' + o.diffs.join(',');
+    if (o.length !== 'any') qs += '&length=' + o.length;
+    if (o.q) qs += '&q=' + encodeURIComponent(o.q);
+    return get('/levels?' + qs).then(function (res) {
+      Online.usingSamples = false;
+      var all = listFrom(res);       // We asked for one extra to know if there is another page.
+      return { levels: all.slice(0, Online.PAGE), more: all.length > Online.PAGE };
+    }).catch(function () {
+      Online.usingSamples = true;
+      var all = localSearch(o), from = o.page * Online.PAGE;
+      return { levels: all.slice(from, from + Online.PAGE), more: all.length > from + Online.PAGE };
+    });
+  };
+
+  // Get specific levels by ID, keeping the order you gave. Missing ones are skipped.
+  Online.byIds = function (ids) {
+    if (!ids.length) { Online.usingSamples = false; return Promise.resolve([]); }
+    return get('/levels?ids=' + ids.map(encodeURIComponent).join(',')).then(function (res) {
+      Online.usingSamples = false;
+      var map = {};
+      listFrom(res).forEach(function (e) { map[e.id] = e; });
+      return ids.map(function (id) { return map[id]; }).filter(Boolean);
+    }).catch(function () {
+      Online.usingSamples = true;
+      var map = {};
+      SAMPLE.forEach(function (e) { map[e.id] = norm(e); });
+      return ids.map(function (id) { return map[id]; }).filter(Boolean);
+    });
+  };
+
+  // Get the level code for one entry, ready for PD.sanitizeLevel.
+  Online.levelData = function (e) {
+    if (e.data) return Promise.resolve(e.data);
+    if (e.sample) {                                   // Sample levels borrow a built-in level.
+      var n = Number(e.id.replace(/\D/g, '')) || 1;
+      var base = PD.LEVELS[(n - 1) % PD.LEVELS.length];
+      return Promise.resolve(JSON.parse(JSON.stringify(base)));
+    }
+    return get('/levels/' + encodeURIComponent(e.id)).then(function (r) { return r.data || r.level || r; });
+  };
+
+  // ------------------------------------------------------------------------
+  // Saved: the online levels you played, newest first (kept in this browser)
+  // ------------------------------------------------------------------------
+  var SAVED_KEY = 'popdash.recentOnline', SAVED_MAX = 30;
+  function loadSaved() {
+    try { var a = JSON.parse(root.localStorage.getItem(SAVED_KEY) || '[]'); return Array.isArray(a) ? a.map(norm) : []; }
+    catch (e) { return []; }
+  }
+  function remember(e) {
+    var list = loadSaved().filter(function (x) { return x.id !== e.id; });
+    var keep = { id: e.id, name: e.name, author: e.author, difficulty: e.difficulty, length: e.length,
+                 downloads: e.downloads, likes: e.likes, createdAt: e.createdAt, sample: e.sample };   // No level code, it is fetched again.
+    list.unshift(keep);
+    try { root.localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(0, SAVED_MAX))); } catch (err) { /* Storage blocked: skip. */ }
+  }
+
+  // ------------------------------------------------------------------------
+  // Playing an online level
+  // ------------------------------------------------------------------------
+  function play(e, from, practice) {
+    Online.levelData(e).then(function (raw) {
+      var lv = e.sample ? raw : PD.sanitizeLevel(raw);   // Sample data is already a clean built-in level.
+      if (!lv) throw new Error('bad level');
+      lv.id = 'online-' + e.id;                          // Own ID so best scores are kept per online level.
+      lv.name = e.name;
+      remember(e);
+      UI.playLevel(lv, { from: from, practice: !!practice });
+    }).catch(function () { G.toast('Could not load that level'); });
+  }
+
+  // ------------------------------------------------------------------------
+  // Small helpers for drawing lists
+  // ------------------------------------------------------------------------
+  function fmt(n) { return n >= 1000 ? (Math.round(n / 100) / 10) + 'k' : String(n); }
+
+  // One level row: difficulty badge, name and stats, Play button.
+  function row(e, from) {
+    var r = el('div', 'level-row');
+    r.appendChild(el('span', 'diff-badge d-' + e.difficulty, DIFF_LABEL[e.difficulty]));
+    var name = el('div', 'grow', e.name);
+    name.appendChild(el('small', '', 'by ' + e.author));
+    var best = S.level('online-' + e.id).normal;
+    name.appendChild(el('small', '', fmt(e.downloads) + ' downloads   |   ' + fmt(e.likes) + ' likes   |   ' +
+      LEN_LABEL[e.length] + (best ? '   |   best ' + best + '%' : '')));
+    var btn = el('button', 'btn green', 'Play');
+    btn.onclick = function () { play(e, from); };
+    r.appendChild(name); r.appendChild(btn);
+    return r;
+  }
+  function fillList(box, levels, from, emptyText) {
+    box.textContent = '';
+    if (!levels.length) { box.appendChild(el('div', 'empty', emptyText)); return; }
+    levels.forEach(function (e) { box.appendChild(row(e, from)); });
+  }
+  // Yellow note shown when sample levels are on screen.
+  function setNote(box) {
+    box.textContent = '';
+    if (Online.usingSamples) box.appendChild(el('div', 'hub-note', 'Showing sample levels. The level server could not be reached.'));
+  }
+  // Make a chip button. sel is true when it is switched on.
+  function chip(text, sel, fn) {
+    var b = el('button', 'tab' + (sel ? ' sel' : ''), text);
+    b.onclick = fn;
+    return b;
+  }
+
+  // ------------------------------------------------------------------------
+  // Saved screen
+  // ------------------------------------------------------------------------
+  function renderSaved() {
+    fillList($('sv-list'), loadSaved(), 'saved', 'Nothing here yet. Play an online level from Search, Featured or Map Packs.');
+  }
+
+  // ------------------------------------------------------------------------
+  // Event screen
+  // ------------------------------------------------------------------------
+  function countdown(iso) {
+    var ms = new Date(iso).getTime() - Date.now();
+    if (!isFinite(ms)) return '';
+    if (ms <= 0) return 'This event has ended';
+    var d = Math.floor(ms / 86400000), h = Math.floor(ms % 86400000 / 3600000);
+    return 'Ends in ' + d + 'd ' + h + 'h';
+  }
+  function renderEvent() {
+    var box = $('ev-box'), cfg = Hub.CONFIG.event;
+    box.textContent = '';
+    box.appendChild(el('div', 'empty', 'Loading...'));
+    Online.byIds(cfg.levelId ? [cfg.levelId] : []).then(function (list) {
+      box.textContent = '';
+      if (!list.length) { box.appendChild(el('div', 'empty', 'No event level yet. Check back soon!')); return; }
+      var e = list[0];
+      box.appendChild(el('div', 'tag', 'EVENT'));
+      box.appendChild(el('div', 'big-name', cfg.title || e.name));
+      box.appendChild(el('p', '', cfg.blurb || ''));
+      if (cfg.endsAt) box.appendChild(el('p', '', countdown(cfg.endsAt)));
+      box.appendChild(row(e, 'event'));
+      var pr = el('button', 'btn pink', 'Practice');
+      pr.onclick = function () { play(e, 'event', true); };
+      box.appendChild(pr);
+      var note = el('div'); setNote(note); box.appendChild(note);
+    });
+  }
+
+  // ------------------------------------------------------------------------
+  // Featured screen
+  // ------------------------------------------------------------------------
+  function renderFeatured() {
+    var list = $('ft-list');
+    list.textContent = ''; list.appendChild(el('div', 'empty', 'Loading...'));
+    Online.byIds(Hub.CONFIG.featured).then(function (levels) {
+      setNote($('ft-note'));
+      fillList(list, levels, 'featured', 'No featured levels yet. Check back soon!');
+    });
+  }
+
+  // ------------------------------------------------------------------------
+  // Map Packs screen (one tab per pack)
+  // ------------------------------------------------------------------------
+  var packIdx = 0;
+  function renderPacks() {
+    var tabs = $('mp-tabs'), packs = Hub.CONFIG.packs;
+    tabs.textContent = '';
+    if (!packs.length) { $('mp-list').textContent = ''; $('mp-list').appendChild(el('div', 'empty', 'No map packs yet.')); return; }
+    if (packIdx >= packs.length) packIdx = 0;
+    packs.forEach(function (p, i) {
+      tabs.appendChild(chip(p.name, i === packIdx, function () { packIdx = i; renderPacks(); }));
+    });
+    var list = $('mp-list');
+    list.textContent = ''; list.appendChild(el('div', 'empty', 'Loading...'));
+    $('mp-info').textContent = '';
+    var shown = packIdx;
+    Online.byIds(packs[shown].levels).then(function (levels) {
+      if (shown !== packIdx) return;                  // The player already switched tabs.
+      setNote($('mp-note'));
+      var beaten = levels.filter(function (e) { return S.level('online-' + e.id).normal >= 100; }).length;
+      $('mp-info').textContent = beaten + ' of ' + levels.length + ' levels beaten';
+      fillList(list, levels, 'packs', 'This pack is empty.');
+    });
+  }
+
+  // ------------------------------------------------------------------------
+  // Search screen
+  // ------------------------------------------------------------------------
+  var st = { sort: 'downloads', diffs: [], length: 'any', q: '', page: 0, levels: [], more: false, loaded: false };
+  var token = 0;                                      // Lets us ignore answers that arrive late.
+
+  function drawChips() {
+    var sort = $('hs-sort'), diff = $('hs-diff'), len = $('hs-len');
+    sort.textContent = ''; diff.textContent = ''; len.textContent = '';
+    SORTS.forEach(function (s) {
+      sort.appendChild(chip(s[1], st.sort === s[0], function () { st.sort = s[0]; drawChips(); runSearch(true); }));
+    });
+    // Difficulty: tap several to combine. None selected means all.
+    diff.appendChild(chip('All', !st.diffs.length, function () { st.diffs = []; drawChips(); runSearch(true); }));
+    DIFFS.forEach(function (d) {
+      diff.appendChild(chip(DIFF_LABEL[d], st.diffs.indexOf(d) >= 0, function () {
+        var i = st.diffs.indexOf(d);
+        if (i >= 0) st.diffs.splice(i, 1); else st.diffs.push(d);
+        drawChips(); runSearch(true);
+      }));
+    });
+    len.appendChild(chip('Any', st.length === 'any', function () { st.length = 'any'; drawChips(); runSearch(true); }));
+    LENS.forEach(function (l) {
+      len.appendChild(chip(LEN_LABEL[l], st.length === l, function () { st.length = l; drawChips(); runSearch(true); }));
+    });
+  }
+
+  // reset = true starts from page 1, false adds the next page.
+  function runSearch(reset) {
+    var mine = ++token, list = $('hs-list');
+    if (reset) { st.page = 0; st.levels = []; list.textContent = ''; list.appendChild(el('div', 'empty', 'Searching...')); }
+    $('hs-more').classList.add('hidden');
+    Online.search({ sort: st.sort, diffs: st.diffs, length: st.length, q: st.q, page: st.page }).then(function (r) {
+      if (mine !== token) return;
+      st.levels = st.levels.concat(r.levels); st.more = r.more; st.loaded = true;
+      setNote($('hs-note'));
+      fillList(list, st.levels, 'search', 'No levels found. Try different filters.');
+      $('hs-more').classList.toggle('hidden', !st.more);
+    });
+  }
+
+  function initSearch() {
+    var q = $('hs-q');
+    drawChips();
+    function go() { st.q = q.value.trim(); runSearch(true); }
+    $('hs-go').onclick = go;
+    q.addEventListener('keydown', function (e) {
+      e.stopPropagation();                            // Typing must not trigger game keys.
+      if (e.key === 'Enter') go();
+    });
+    $('hs-more').onclick = function () { st.page++; runSearch(false); };
+  }
+
+  // ------------------------------------------------------------------------
+  // Hooks
+  // ------------------------------------------------------------------------
+  // ui.js calls this every time a screen is shown.
+  Hub.onShow = function (name) {
+    if (name === 'saved') renderSaved();
+    if (name === 'event') renderEvent();
+    if (name === 'featured') renderFeatured();
+    if (name === 'packs') renderPacks();
+    if (name === 'search') {
+      if (!st.loaded) runSearch(true);
+      else fillList($('hs-list'), st.levels, 'search', 'No levels found. Try different filters.');   // Refresh best scores.
+    }
+  };
+
+  $('sv-clear').onclick = function () {
+    try { root.localStorage.removeItem(SAVED_KEY); } catch (e) { /* Ignore. */ }
+    renderSaved();
+  };
+  initSearch();
+})(window);
 
 </script>
   <script>
