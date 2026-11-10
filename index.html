@@ -501,6 +501,14 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
 .hub-event p { margin: 0; color: var(--muted); }
 .hub-event .level-row { width: 100%; text-align: left; }
 .diff-badge.d-custom { background: var(--pink); }
+
+/* Small tag shown next to moderators (author names and the account screen) */
+.mod-tag {
+  display: inline-block; background: var(--yellow); color: var(--ink); border: 3px solid var(--ink);
+  border-radius: 999px; padding: 0 8px; font-size: 11px; font-weight: 700; line-height: 1.5;
+  box-shadow: 0 2px 0 var(--ink); vertical-align: middle;
+}
+.acct-id .mod-tag { font-size: 13px; padding: 1px 12px; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -734,7 +742,8 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
 
   <!-- ================= Level Hub (square buttons) ================= -->
   <section id="screen-createhub" class="screen hidden">
-    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>Level Hub</h2><span></span></header>
+    <header class="bar"><button class="btn" data-go="menu">Back</button><h2>Level Hub</h2>
+      <div class="bar-right"><button id="hub-mod" class="btn yellow hidden" data-go="modqueue">Mod</button></div></header>
     <div class="hub-grid">
       <!-- Create: opens the custom level menu (My Levels) -->
       <button class="btn square hubbtn blue" data-go="custom" aria-label="Create" title="Create">
@@ -837,6 +846,15 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
       <div id="hs-note"></div>
       <div id="hs-list" class="level-list"></div>
       <button id="hs-more" class="btn blue hub-more hidden">Load more</button>
+    </div>
+  </section>
+
+  <!-- ================= Moderation (moderators only) ================= -->
+  <section id="screen-modqueue" class="screen hidden">
+    <header class="bar"><button class="btn" data-go="createhub">Back</button><h2>Rate Levels</h2><span></span></header>
+    <div class="card wide">
+      <div class="hub-label">New levels waiting for a difficulty. Play one, then pick its difficulty.</div>
+      <div id="mq-list" class="level-list"></div>
     </div>
   </section>
 
@@ -4493,7 +4511,7 @@ PD.SONG_CREDITS = [];
   'use strict';
   var PD = root.PD, A = PD.Audio, S = PD.Save, G = PD.Game, R = PD.Render;
 
-  var SCREENS = ['menu', 'levels', 'icons', 'shop', 'achievements', 'settings', 'credits', 'custom', 'editor', 'createhub', 'saved', 'event', 'featured', 'packs', 'search'];
+  var SCREENS = ['menu', 'levels', 'icons', 'shop', 'achievements', 'settings', 'credits', 'custom', 'editor', 'createhub', 'saved', 'event', 'featured', 'packs', 'search', 'modqueue'];
   var current = 'menu';
   var levelIdx = 0;          // Which built-in level the carousel is showing.
   var playing = null;        // { data, practice, test, from } while a level runs.
@@ -4921,9 +4939,10 @@ PD.SONG_CREDITS = [];
   function renderAccountIn(box) {
     var acc = PD.Api.account(), save = S.get();
     var who = el('div', 'acct-id');
+    if (acc.isModerator) who.appendChild(el('div', 'mod-tag', 'MODERATOR'));   // Tag for moderators
     nameEl = el('div', 'acct-name', acc.displayName);
     who.appendChild(nameEl);
-    who.appendChild(el('div', 'sub', '@' + acc.username + (acc.isAdmin ? '  |  Admin' : '') +
+    who.appendChild(el('div', 'sub', '@' + acc.username + (acc.isAdmin ? '  |  Admin' : '') + (acc.isModerator ? '  |  Moderator' : '') +
       '  |  Joined ' + new Date(acc.createdAt).toLocaleDateString()));
     var beaten = Object.keys(save.progress).filter(function (k) { return save.progress[k].done; }).length;
     who.appendChild(el('div', 'sub', beaten + ' levels beaten  |  ' + Object.keys(save.owned).length + ' icons bought  |  ' +
@@ -5053,7 +5072,7 @@ PD.SONG_CREDITS = [];
       name.appendChild(el('small', '', lv.objects.length + ' objects   •   best ' + S.level(lv.id).normal + '%'));
       var play = el('button', 'btn green', 'Play'), edit = el('button', 'btn blue', 'Edit'), del = el('button', 'btn red', 'Delete'), pub = el('button', 'btn pink', 'Publish');
       play.onclick = function () { UI.playLevel(lv, { from: 'custom' }); };
-      pub.onclick = function () { PD.Hub.publish(lv); };   // Beat it, then send it in for review (js/hub.js)
+      pub.onclick = function () { PD.Hub.publish(lv); };   // Beat it, then publish it (js/hub.js)
       edit.onclick = function () { PD.Editor.open(lv); };
       del.onclick = function () {
         UI.modal('Delete "' + lv.name + '"?', el('div', 'sub', 'This cannot be undone.'), [
@@ -6713,7 +6732,8 @@ PD.registerLevel({
      Map Packs -> tabs, each one a pack of levels FallGameDev picked
      Search    -> online levels by most played, most liked, trending, recent,
                   difficulty and length
-   It also holds the Publish flow (Hub.publish) used by the My Levels screen.
+   It also holds the Publish flow (Hub.publish) used by the My Levels screen and the
+   Moderation screen (moderators rate new N/A levels).
 
    HOW TO PICK LEVELS: edit Hub.CONFIG below with level IDs from the
    published_levels table.
@@ -6722,7 +6742,10 @@ PD.registerLevel({
      GET  /levels?q=&difficulty=Easy,Hard&length=&sort=plays|top|trending|new&page=&limit=&ids=
      GET  /levels/:id            one level, its code is in level.data
      POST /levels                save a draft         { id?, name, data }
-     POST /levels/:id/submit     send for review      { beaten: true }
+     POST /levels/:id/submit     publish (goes live as N/A)  { beaten: true }
+     GET  /mod/levels            unrated levels (moderators)
+     POST /mod/levels/:id/rate        { difficulty }   (moderators)
+     POST /mod/levels/:id/unpublish   { note }         (moderators)
      POST /levels/:id/like       like or unlike       -> { liked, likes }
      POST /levels/:id/play       count a play
    The length filter, trending sort, ids list and several difficulties need
@@ -6763,8 +6786,9 @@ PD.registerLevel({
   // ------------------------------------------------------------------------
   // Words and sorting options
   // ------------------------------------------------------------------------
-  var DIFFS = ['easy', 'normal', 'hard', 'harder'];        // The filter chips.
-  var DIFF_LABEL = { custom: 'Custom', easy: 'Easy', normal: 'Normal', hard: 'Hard', harder: 'Harder' };
+  var DIFFS = ['easy', 'normal', 'hard', 'harder', 'custom'];   // The filter chips. The server calls N/A "Custom".
+  var DIFF_LABEL = { custom: 'N/A', easy: 'Easy', normal: 'Normal', hard: 'Hard', harder: 'Harder' };
+  function serverDiff(d) { return d.charAt(0).toUpperCase() + d.slice(1); }   // 'hard' -> 'Hard'
   var LENS = ['tiny', 'short', 'medium', 'long', 'xl'];
   var LEN_LABEL = { tiny: 'Tiny', short: 'Short', medium: 'Medium', long: 'Long', xl: 'XL' };
   /* The server stores how many objects a level has, so "length" is worked out
@@ -6853,7 +6877,7 @@ PD.registerLevel({
     return {
       id: String(r.id),
       name: String(r.name || 'Untitled').slice(0, 24),
-      author: String(r.authorName || 'Unknown').slice(0, 24),
+      author: String(r.authorName || 'Unknown').slice(0, 24), authorIsMod: !!r.authorIsMod,
       difficulty: d, objects: objects, length: lengthOf(objects),
       plays: Number(r.plays) || 0, likes: Number(r.likes) || 0,
       publishedAt: r.publishedAt || null,
@@ -6887,7 +6911,7 @@ PD.registerLevel({
      Resolves with { levels, more } and sets Online.usingSamples. */
   Online.search = function (o) {
     var qs = 'sort=' + o.sort + '&limit=' + Online.PAGE + '&page=' + (o.page + 1);
-    if (o.diffs.length) qs += '&difficulty=' + o.diffs.map(function (d) { return DIFF_LABEL[d]; }).join(',');
+    if (o.diffs.length) qs += '&difficulty=' + o.diffs.map(serverDiff).join(',');
     if (o.length !== 'any') qs += '&length=' + o.length;
     if (o.q) qs += '&q=' + encodeURIComponent(o.q);
     return call('GET', '/levels?' + qs).then(function (res) {
@@ -6938,21 +6962,22 @@ PD.registerLevel({
     var list = loadSaved().filter(function (x) { return x.id !== e.id; });
     // Stored in the server's shape, without level code (it is fetched again when played).
     list.unshift({ id: e.id, name: e.name, authorName: e.author, difficulty: e.difficulty, objects: e.objects,
-                   plays: e.plays, likes: e.likes, publishedAt: e.publishedAt, sample: e.sample });
+                   plays: e.plays, likes: e.likes, publishedAt: e.publishedAt, sample: e.sample, authorIsMod: e.authorIsMod });
     try { root.localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(0, SAVED_MAX))); } catch (err) { /* Storage blocked: skip. */ }
   }
 
   // ------------------------------------------------------------------------
   // Playing an online level
   // ------------------------------------------------------------------------
-  function play(e, from, practice) {
+  // quiet = true is used by moderators testing a level: it adds no play and is not put in Saved.
+  function play(e, from, practice, quiet) {
     Online.levelData(e).then(function (raw) {
       var lv = e.sample ? raw : PD.sanitizeLevel(raw);   // Sample data is already a clean built-in level.
       if (!lv) throw new Error('bad level');
       lv.id = 'online-' + e.id;                          // Own ID so best scores are kept per online level.
       lv.name = e.name;
-      remember(e);
-      if (!e.sample && !practice) call('POST', '/levels/' + encodeURIComponent(e.id) + '/play').catch(function () { /* Not important. */ });
+      if (!quiet) remember(e);
+      if (!e.sample && !practice && !quiet) call('POST', '/levels/' + encodeURIComponent(e.id) + '/play').catch(function () { /* Not important. */ });
       UI.playLevel(lv, { from: from, practice: !!practice });
     }).catch(function () { G.toast('Could not load that level'); });
   }
@@ -6967,7 +6992,9 @@ PD.registerLevel({
     var r = el('div', 'level-row');
     r.appendChild(el('span', 'diff-badge d-' + e.difficulty, DIFF_LABEL[e.difficulty]));
     var name = el('div', 'grow', e.name);
-    name.appendChild(el('small', '', 'by ' + e.author));
+    var by = el('small', '', 'by ' + e.author + ' ');
+    if (e.authorIsMod) by.appendChild(el('span', 'mod-tag', 'MOD'));
+    name.appendChild(by);
     var best = S.level('online-' + e.id).normal;
     name.appendChild(el('small', '', fmt(e.plays) + ' plays   |   ' + LEN_LABEL[e.length] +
       (best ? '   |   best ' + best + '%' : '')));
@@ -7149,8 +7176,8 @@ PD.registerLevel({
       return;
     }
     var body = el('div', 'sub', 'First you have to beat "' + lv.name + '" in normal mode. That proves it can be finished. ' +
-      'After that it is sent to FallGameDev for review. If it is approved it shows up in Search. ' +
-      'If you published this level before, the new version replaces it once it is approved.');
+      'After that it goes live right away with the difficulty N/A. A moderator will rate it later. ' +
+      'If you published this level before, the new version replaces it and goes back to N/A.');
     UI.modal('Publish this level?', body, [
       { text: 'Cancel' },
       { text: 'Start', cls: 'green', fn: function () {
@@ -7166,16 +7193,69 @@ PD.registerLevel({
     if (!p || !playing || stats.practice || stats.test || playing.data.id !== p.id) return;
     pendingPublish = null;
     var map = loadMap(), lv = p.level;
-    G.toast('Sending your level in...');
+    G.toast('Publishing...');
     call('POST', '/levels', { id: map[lv.id] || undefined, name: lv.name, data: lv }).then(function (res) {
       map[lv.id] = res.level.id; saveMap(map);
       return call('POST', '/levels/' + res.level.id + '/submit', { beaten: true });
     }).then(function () {
-      G.toast('Sent for review. Thank you!');
+      G.toast('Published! It shows as N/A until a moderator rates it.');
     }, function (err) {
-      G.toast(err.status === 409 ? 'That level was already sent in' : err.message);
+      G.toast(err.status === 409 ? 'That level is already published' : err.message);
     });
   };
+
+  // ------------------------------------------------------------------------
+  // Moderation: published levels that are still N/A. Moderators play them,
+  // then pick a difficulty (or take the level down).
+  // ------------------------------------------------------------------------
+  function isMod() { var a = PD.Api.account(); return !!(a && (a.isModerator || a.isAdmin)); }
+
+  function renderModQueue() {
+    var list = $('mq-list');
+    list.textContent = '';
+    if (!isMod()) { list.appendChild(el('div', 'empty', 'Moderators only.')); return; }
+    list.appendChild(el('div', 'empty', 'Loading...'));
+    call('GET', '/mod/levels').then(function (res) {
+      list.textContent = '';
+      var levels = (res.levels || []).map(norm);
+      if (!levels.length) { list.appendChild(el('div', 'empty', 'Nothing to rate. Every level has a difficulty!')); return; }
+      levels.forEach(function (e) { list.appendChild(modRow(e)); });
+    }, function (err) { list.textContent = ''; list.appendChild(el('div', 'empty', err.message)); });
+  }
+
+  // One level to rate: Play to test it, a button per difficulty, and Remove.
+  function modRow(e) {
+    var r = el('div', 'level-row');
+    var name = el('div', 'grow', e.name);
+    name.appendChild(el('small', '', 'by ' + e.author + '   |   ' + e.objects + ' objects   |   ' + LEN_LABEL[e.length]));
+    var play1 = el('button', 'btn green', 'Play');
+    play1.onclick = function () { play(e, 'modqueue', false, true); };
+    r.appendChild(name); r.appendChild(play1);
+    [['Easy', 'green'], ['Normal', 'blue'], ['Hard', 'yellow'], ['Harder', 'red']].forEach(function (d) {
+      var b = el('button', 'btn ' + d[1], d[0]);
+      b.onclick = function () {
+        b.disabled = true;
+        call('POST', '/mod/levels/' + encodeURIComponent(e.id) + '/rate', { difficulty: d[0] }).then(function () {
+          G.toast('"' + e.name + '" is now ' + d[0]);
+          r.parentNode && r.parentNode.removeChild(r);
+        }, function (err) { b.disabled = false; G.toast(err.message); });
+      };
+      r.appendChild(b);
+    });
+    var rm = el('button', 'btn red', 'Remove');
+    rm.onclick = function () {
+      UI.modal('Remove "' + e.name + '"?', el('div', 'sub', 'The level is taken down and the author sees that it was removed.'), [
+        { text: 'Cancel' },
+        { text: 'Remove', cls: 'red', fn: function () {
+          call('POST', '/mod/levels/' + encodeURIComponent(e.id) + '/unpublish', {}).then(function () {
+            r.parentNode && r.parentNode.removeChild(r);
+          }, function (err) { G.toast(err.message); });
+        } }
+      ]);
+    };
+    r.appendChild(rm);
+    return r;
+  }
 
   // ------------------------------------------------------------------------
   // Hooks
@@ -7183,6 +7263,8 @@ PD.registerLevel({
   // ui.js calls this every time a screen is shown (name is null while a level runs).
   Hub.onShow = function (name) {
     if (name) pendingPublish = null;                  // Left the level without beating it: forget the publish.
+    if (name === 'createhub') $('hub-mod').classList.toggle('hidden', !isMod());   // Mod button is for moderators only.
+    if (name === 'modqueue') renderModQueue();
     if (name === 'saved') renderSaved();
     if (name === 'event') renderEvent();
     if (name === 'featured') renderFeatured();
