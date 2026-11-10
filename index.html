@@ -500,6 +500,7 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
 .hub-event .big-name { font-size: clamp(28px, 6vw, 44px); font-weight: 700; text-shadow: 0 4px 0 var(--ink); }
 .hub-event p { margin: 0; color: var(--muted); }
 .hub-event .level-row { width: 100%; text-align: left; }
+.diff-badge.d-custom { background: var(--pink); }
 </style>
 </head>
 <body>
@@ -4618,6 +4619,7 @@ PD.SONG_CREDITS = [];
   }
 
   function openComplete(stats) {
+    if (PD.Hub && PD.Hub.onComplete) PD.Hub.onComplete(stats, playing);   // Lets the Publish flow notice a win (js/hub.js)
     $('cp-title').textContent = stats.practice ? 'Practice Complete!' : 'Level Complete!';
     var box = $('cp-stats'); box.textContent = '';
     function line(k, v) { box.appendChild(el('span', '', k)); box.appendChild(el('b', '', v)); }
@@ -5049,8 +5051,9 @@ PD.SONG_CREDITS = [];
     levels.forEach(function (lv) {
       var row = el('div', 'level-row'), name = el('div', 'grow', lv.name);
       name.appendChild(el('small', '', lv.objects.length + ' objects   •   best ' + S.level(lv.id).normal + '%'));
-      var play = el('button', 'btn green', 'Play'), edit = el('button', 'btn blue', 'Edit'), del = el('button', 'btn red', 'Delete');
+      var play = el('button', 'btn green', 'Play'), edit = el('button', 'btn blue', 'Edit'), del = el('button', 'btn red', 'Delete'), pub = el('button', 'btn pink', 'Publish');
       play.onclick = function () { UI.playLevel(lv, { from: 'custom' }); };
+      pub.onclick = function () { PD.Hub.publish(lv); };   // Beat it, then send it in for review (js/hub.js)
       edit.onclick = function () { PD.Editor.open(lv); };
       del.onclick = function () {
         UI.modal('Delete "' + lv.name + '"?', el('div', 'sub', 'This cannot be undone.'), [
@@ -5058,7 +5061,7 @@ PD.SONG_CREDITS = [];
           { text: 'Delete', cls: 'red', fn: function () { S.deleteCustom(lv.id); renderCustom(); } }
         ]);
       };
-      row.appendChild(name); row.appendChild(play); row.appendChild(edit); row.appendChild(del);
+      row.appendChild(name); row.appendChild(play); row.appendChild(pub); row.appendChild(edit); row.appendChild(del);
       list.appendChild(row);
     });
   }
@@ -6708,21 +6711,25 @@ PD.registerLevel({
      Event     -> one level that FallGameDev picked
      Featured  -> a list of levels FallGameDev picked
      Map Packs -> tabs, each one a pack of levels FallGameDev picked
-     Search    -> online levels by most downloads, most liked, trending,
-                  recent, difficulty and length
+     Search    -> online levels by most played, most liked, trending, recent,
+                  difficulty and length
+   It also holds the Publish flow (Hub.publish) used by the My Levels screen.
 
-   HOW TO PICK LEVELS: edit Hub.CONFIG below. Use the level IDs from your
-   Supabase levels table.
+   HOW TO PICK LEVELS: edit Hub.CONFIG below with level IDs from the
+   published_levels table.
 
-   WHAT THE SERVER SHOULD ANSWER (edit Online below if yours is different):
-     GET {Api.BASE}/levels?sort=&difficulty=&length=&q=&limit=&offset=
-         -> an array, or { levels: [...] }
-     GET {Api.BASE}/levels?ids=a,b,c  -> the same, for specific IDs
-     GET {Api.BASE}/levels/<id>       -> one level, with its code in .data
-   Each level: { id, name, author, difficulty, length, downloads, likes,
-                 createdAt, data }   (data is the same level code as Export)
-   If the server cannot be reached, the hub shows SAMPLE levels so you can
-   test the screens. A yellow note tells the player when that happens.
+   ROUTES USED (all in supabase/functions/api):
+     GET  /levels?q=&difficulty=Easy,Hard&length=&sort=plays|top|trending|new&page=&limit=&ids=
+     GET  /levels/:id            one level, its code is in level.data
+     POST /levels                save a draft         { id?, name, data }
+     POST /levels/:id/submit     send for review      { beaten: true }
+     POST /levels/:id/like       like or unlike       -> { liked, likes }
+     POST /levels/:id/play       count a play
+   The length filter, trending sort, ids list and several difficulties need
+   the updated index.ts that comes with this file.
+
+   If the server cannot be reached, SAMPLE levels are shown so you can test the
+   screens. A yellow note tells the player when that happens.
    ========================================================================== */
 (function (root) {
   'use strict';
@@ -6740,125 +6747,152 @@ PD.registerLevel({
     event: {
       title: 'Level of the Week',
       blurb: 'Picked by FallGameDev. Can you beat it?',
-      levelId: 's4',
+      levelId: 'sample-04',
       endsAt: null            // Optional end date, like '2026-12-01T00:00:00Z'. null hides the countdown.
     },
     // The Featured list, top to bottom.
-    featured: ['s4', 's1', 's2', 's7', 's3'],
+    featured: ['sample-04', 'sample-01', 'sample-02', 'sample-07', 'sample-03'],
     // Map packs: each one becomes a tab.
     packs: [
-      { name: 'Starter Pack', levels: ['s11', 's1', 's5', 's6'] },
-      { name: 'Neon Pack',    levels: ['s2', 's7', 's12'] },
-      { name: 'Hard Pack',    levels: ['s3', 's8', 's9', 's4', 's10'] }
+      { name: 'Starter Pack', levels: ['sample-11', 'sample-01', 'sample-05', 'sample-06'] },
+      { name: 'Neon Pack',    levels: ['sample-02', 'sample-07', 'sample-12'] },
+      { name: 'Hard Pack',    levels: ['sample-03', 'sample-08', 'sample-09', 'sample-04', 'sample-10'] }
     ]
   };
 
   // ------------------------------------------------------------------------
   // Words and sorting options
   // ------------------------------------------------------------------------
-  var DIFFS = ['easy', 'normal', 'hard', 'harder'];
-  var DIFF_LABEL = { easy: 'Easy', normal: 'Normal', hard: 'Hard', harder: 'Harder' };
+  var DIFFS = ['easy', 'normal', 'hard', 'harder'];        // The filter chips.
+  var DIFF_LABEL = { custom: 'Custom', easy: 'Easy', normal: 'Normal', hard: 'Hard', harder: 'Harder' };
   var LENS = ['tiny', 'short', 'medium', 'long', 'xl'];
   var LEN_LABEL = { tiny: 'Tiny', short: 'Short', medium: 'Medium', long: 'Long', xl: 'XL' };
+  /* The server stores how many objects a level has, so "length" is worked out
+     from that. Keep these numbers the same as LENGTH_BUCKETS in index.ts.
+     Each pair is [fewest objects, up to but not including]. */
+  var LEN_BUCKETS = { tiny: [0, 100], short: [100, 300], medium: [300, 800], long: [800, 2000], xl: [2000, 1e9] };
   var SORTS = [
-    ['downloads', 'Most Downloads'], ['likes', 'Most Liked'],
-    ['trending', 'Trending'], ['recent', 'Recent']
+    ['plays', 'Most Played'], ['top', 'Most Liked'],
+    ['trending', 'Trending'], ['new', 'Recent']
   ];
+  function lengthOf(objects) {
+    for (var i = 0; i < LENS.length; i++) {
+      var b = LEN_BUCKETS[LENS[i]];
+      if (objects >= b[0] && objects < b[1]) return LENS[i];
+    }
+    return 'medium';
+  }
 
   // ------------------------------------------------------------------------
   // SAMPLE levels (only used when the server cannot be reached)
   // They play the built-in levels so you can test everything.
   // ------------------------------------------------------------------------
   function daysAgo(d) { return new Date(Date.now() - d * 86400000).toISOString(); }
-  function mk(id, name, author, diff, len, dl, likes, age) {
-    return { id: id, name: name, author: author, difficulty: diff, length: len,
-             downloads: dl, likes: likes, createdAt: daysAgo(age), sample: true };
+  function mk(n, name, author, diff, len, plays, likes, age) {
+    var objs = { tiny: 60, short: 200, medium: 500, long: 1200, xl: 2500 }[len];
+    return { id: 'sample-' + (n < 10 ? '0' : '') + n, name: name, authorName: author, difficulty: diff,
+             objects: objs, plays: plays, likes: likes, publishedAt: daysAgo(age), sample: true };
   }
   var SAMPLE = [
-    mk('s1',  'Starlight Sprint', 'FallGameDev', 'easy',   'short',  5200, 1480, 40),
-    mk('s2',  'Neon Tide Remix',  'FallGameDev', 'normal', 'medium', 4100, 1210, 25),
-    mk('s3',  'Comet Crash',      'Eddie',       'hard',   'long',   3300,  900, 12),
-    mk('s4',  'Abyss Echo',       'FallGameDev', 'harder', 'long',   2800, 1500,  6),
-    mk('s5',  'Tiny Hops',        'PixelPaws',   'easy',   'tiny',   1900,  410,  3),
-    mk('s6',  'Spike City',       'Nugget',      'normal', 'short',  2400,  600, 18),
-    mk('s7',  'Ship Shape',       'Lucky',       'normal', 'medium', 1700,  520,  9),
-    mk('s8',  'Wave Rider',       'BeanFan',     'hard',   'medium', 1500,  640,  2),
-    mk('s9',  'Marathon Mania',   'Eddie',       'hard',   'xl',      900,  300, 30),
-    mk('s10', 'Robo Rush',        'PixelPaws',   'harder', 'xl',      600,  450,  1),
-    mk('s11', 'Chill Cube',       'Nugget',      'easy',   'short',  3500,  700, 60),
-    mk('s12', 'Gravity Flip',     'Lucky',       'normal', 'long',   1200,  380, 14)
+    mk(1,  'Starlight Sprint', 'FallGameDev', 'Easy',   'short',  5200, 1480, 40),
+    mk(2,  'Neon Tide Remix',  'FallGameDev', 'Normal', 'medium', 4100, 1210, 25),
+    mk(3,  'Comet Crash',      'Eddie',       'Hard',   'long',   3300,  900, 12),
+    mk(4,  'Abyss Echo',       'FallGameDev', 'Harder', 'long',   2800, 1500,  6),
+    mk(5,  'Tiny Hops',        'PixelPaws',   'Easy',   'tiny',   1900,  410,  3),
+    mk(6,  'Spike City',       'Nugget',      'Normal', 'short',  2400,  600, 18),
+    mk(7,  'Ship Shape',       'Lucky',       'Normal', 'medium', 1700,  520,  9),
+    mk(8,  'Wave Rider',       'BeanFan',     'Hard',   'medium', 1500,  640,  2),
+    mk(9,  'Marathon Mania',   'Eddie',       'Hard',   'xl',      900,  300, 30),
+    mk(10, 'Robo Rush',        'PixelPaws',   'Harder', 'xl',      600,  450,  1),
+    mk(11, 'Chill Cube',       'Nugget',      'Easy',   'short',  3500,  700, 60),
+    mk(12, 'Gravity Flip',     'Lucky',       'Normal', 'long',   1200,  380, 14)
   ];
 
   // ------------------------------------------------------------------------
   // Online: all the talking to the server lives here
   // ------------------------------------------------------------------------
   var Online = Hub.Online = {};
-  Online.PAGE = 12;           // How many results per page.
+  Online.PAGE = 12;             // How many results per page.
   Online.usingSamples = false;  // True when the last request fell back to samples.
 
-  // One plain GET request. Resolves with the JSON, rejects on any problem.
-  function get(path) {
+  // The login token, read from where api.js keeps it (null when logged out).
+  function token() {
+    try { var s = JSON.parse(root.localStorage.getItem('popdash.session') || 'null'); return s && s.token || null; }
+    catch (e) { return null; }
+  }
+
+  /* One request to the API. Resolves with the JSON, rejects with an Error that
+     has .status (0 = could not reach the server) and a readable message. */
+  function call(method, path, body) {
     var ctl = root.AbortController ? new root.AbortController() : null;
-    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 10000) : null;
-    return root.fetch(PD.Api.BASE + path, { signal: ctl ? ctl.signal : undefined }).then(function (res) {
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 15000) : null;
+    var headers = {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (token()) headers.Authorization = 'Bearer ' + token();
+    return root.fetch(PD.Api.BASE + path, {
+      method: method, headers: headers, body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (res) {
       clearTimeout(timer);
-      if (!res.ok) throw new Error('server ' + res.status);
-      return res.json();
-    }, function (e) { clearTimeout(timer); throw e; });
+      return res.json().catch(function () { return null; }).then(function (data) {
+        if (res.ok) return data;
+        var e = new Error((data && data.error && data.error.message) || ('Server problem (' + res.status + ')'));
+        e.status = res.status; throw e;
+      });
+    }, function () {
+      clearTimeout(timer);
+      var e = new Error('Could not reach the server'); e.status = 0; throw e;
+    });
   }
 
   // Turn whatever the server sent into one tidy shape the screens can trust.
   function norm(r) {
-    var d = String(r.difficulty == null ? '' : r.difficulty).toLowerCase();
-    if (DIFFS.indexOf(d) < 0) d = DIFFS[Number(d) - 1] || 'normal';     // Also accept 1 to 4.
-    var l = String(r.length == null ? '' : r.length).toLowerCase();
-    if (LENS.indexOf(l) < 0) l = 'medium';
+    var d = String(r.difficulty || 'custom').toLowerCase();
+    if (!DIFF_LABEL[d]) d = 'custom';
+    var objects = Number(r.objects) || 0;
     return {
       id: String(r.id),
       name: String(r.name || 'Untitled').slice(0, 24),
-      author: String(r.author || r.authorName || r.creator || 'Unknown').slice(0, 20),
-      difficulty: d, length: l,
-      downloads: Number(r.downloads) || 0, likes: Number(r.likes) || 0,
-      createdAt: r.createdAt || r.created_at || null,
-      data: r.data || r.level || null,
+      author: String(r.authorName || 'Unknown').slice(0, 24),
+      difficulty: d, objects: objects, length: lengthOf(objects),
+      plays: Number(r.plays) || 0, likes: Number(r.likes) || 0,
+      publishedAt: r.publishedAt || null,
       sample: !!r.sample
     };
   }
-  function listFrom(res) { return (Array.isArray(res) ? res : (res && res.levels) || []).map(norm); }
 
   // Sorting and filtering done here, used for the sample levels.
   function trendScore(e) {
-    var age = Math.max(0, (Date.now() - new Date(e.createdAt || Date.now()).getTime()) / 86400000);
-    return (e.downloads + e.likes * 3) / Math.pow(age + 2, 0.8);
+    var age = Math.max(0, (Date.now() - new Date(e.publishedAt || Date.now()).getTime()) / 86400000);
+    return (e.plays + e.likes * 3) / Math.pow(age + 2, 0.8);
   }
   function localSearch(o) {
-    var q = (o.q || '').toLowerCase(), out = SAMPLE.filter(function (e) {
+    var q = (o.q || '').toLowerCase(), out = SAMPLE.map(norm).filter(function (e) {
       if (o.diffs.length && o.diffs.indexOf(e.difficulty) < 0) return false;
       if (o.length !== 'any' && e.length !== o.length) return false;
-      if (q && (e.name + ' ' + e.author + ' ' + e.id).toLowerCase().indexOf(q) < 0) return false;
+      if (q && (e.name + ' ' + e.author).toLowerCase().indexOf(q) < 0) return false;
       return true;
-    }).map(norm);
+    });
     out.sort(function (a, b) {
-      if (o.sort === 'likes') return b.likes - a.likes;
+      if (o.sort === 'top') return b.likes - a.likes;
       if (o.sort === 'trending') return trendScore(b) - trendScore(a);
-      if (o.sort === 'recent') return new Date(b.createdAt) - new Date(a.createdAt);
-      return b.downloads - a.downloads;
+      if (o.sort === 'new') return new Date(b.publishedAt) - new Date(a.publishedAt);
+      return b.plays - a.plays;
     });
     return out;
   }
 
-  /* Search the online levels.
-     o = { sort, diffs: ['easy'...], length: 'any'|'short'..., q, page }
+  /* Search the published levels.
+     o = { sort, diffs: ['easy'...], length: 'any'|'short'..., q, page (starts at 0) }
      Resolves with { levels, more } and sets Online.usingSamples. */
   Online.search = function (o) {
-    var qs = 'sort=' + encodeURIComponent(o.sort) + '&limit=' + (Online.PAGE + 1) + '&offset=' + (o.page * Online.PAGE);
-    if (o.diffs.length) qs += '&difficulty=' + o.diffs.join(',');
+    var qs = 'sort=' + o.sort + '&limit=' + Online.PAGE + '&page=' + (o.page + 1);
+    if (o.diffs.length) qs += '&difficulty=' + o.diffs.map(function (d) { return DIFF_LABEL[d]; }).join(',');
     if (o.length !== 'any') qs += '&length=' + o.length;
     if (o.q) qs += '&q=' + encodeURIComponent(o.q);
-    return get('/levels?' + qs).then(function (res) {
+    return call('GET', '/levels?' + qs).then(function (res) {
       Online.usingSamples = false;
-      var all = listFrom(res);       // We asked for one extra to know if there is another page.
-      return { levels: all.slice(0, Online.PAGE), more: all.length > Online.PAGE };
+      return { levels: (res.levels || []).map(norm), more: !!res.hasMore };
     }).catch(function () {
       Online.usingSamples = true;
       var all = localSearch(o), from = o.page * Online.PAGE;
@@ -6869,28 +6903,27 @@ PD.registerLevel({
   // Get specific levels by ID, keeping the order you gave. Missing ones are skipped.
   Online.byIds = function (ids) {
     if (!ids.length) { Online.usingSamples = false; return Promise.resolve([]); }
-    return get('/levels?ids=' + ids.map(encodeURIComponent).join(',')).then(function (res) {
+    return call('GET', '/levels?limit=50&ids=' + ids.map(encodeURIComponent).join(',')).then(function (res) {
       Online.usingSamples = false;
       var map = {};
-      listFrom(res).forEach(function (e) { map[e.id] = e; });
+      (res.levels || []).map(norm).forEach(function (e) { map[e.id] = e; });
       return ids.map(function (id) { return map[id]; }).filter(Boolean);
     }).catch(function () {
       Online.usingSamples = true;
       var map = {};
-      SAMPLE.forEach(function (e) { map[e.id] = norm(e); });
+      SAMPLE.map(norm).forEach(function (e) { map[e.id] = e; });
       return ids.map(function (id) { return map[id]; }).filter(Boolean);
     });
   };
 
   // Get the level code for one entry, ready for PD.sanitizeLevel.
   Online.levelData = function (e) {
-    if (e.data) return Promise.resolve(e.data);
     if (e.sample) {                                   // Sample levels borrow a built-in level.
       var n = Number(e.id.replace(/\D/g, '')) || 1;
       var base = PD.LEVELS[(n - 1) % PD.LEVELS.length];
       return Promise.resolve(JSON.parse(JSON.stringify(base)));
     }
-    return get('/levels/' + encodeURIComponent(e.id)).then(function (r) { return r.data || r.level || r; });
+    return call('GET', '/levels/' + encodeURIComponent(e.id)).then(function (r) { return r.level.data; });
   };
 
   // ------------------------------------------------------------------------
@@ -6898,14 +6931,14 @@ PD.registerLevel({
   // ------------------------------------------------------------------------
   var SAVED_KEY = 'popdash.recentOnline', SAVED_MAX = 30;
   function loadSaved() {
-    try { var a = JSON.parse(root.localStorage.getItem(SAVED_KEY) || '[]'); return Array.isArray(a) ? a.map(norm) : []; }
+    try { var a = JSON.parse(root.localStorage.getItem(SAVED_KEY) || '[]'); return Array.isArray(a) ? a : []; }
     catch (e) { return []; }
   }
   function remember(e) {
     var list = loadSaved().filter(function (x) { return x.id !== e.id; });
-    var keep = { id: e.id, name: e.name, author: e.author, difficulty: e.difficulty, length: e.length,
-                 downloads: e.downloads, likes: e.likes, createdAt: e.createdAt, sample: e.sample };   // No level code, it is fetched again.
-    list.unshift(keep);
+    // Stored in the server's shape, without level code (it is fetched again when played).
+    list.unshift({ id: e.id, name: e.name, authorName: e.author, difficulty: e.difficulty, objects: e.objects,
+                   plays: e.plays, likes: e.likes, publishedAt: e.publishedAt, sample: e.sample });
     try { root.localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(0, SAVED_MAX))); } catch (err) { /* Storage blocked: skip. */ }
   }
 
@@ -6919,6 +6952,7 @@ PD.registerLevel({
       lv.id = 'online-' + e.id;                          // Own ID so best scores are kept per online level.
       lv.name = e.name;
       remember(e);
+      if (!e.sample && !practice) call('POST', '/levels/' + encodeURIComponent(e.id) + '/play').catch(function () { /* Not important. */ });
       UI.playLevel(lv, { from: from, practice: !!practice });
     }).catch(function () { G.toast('Could not load that level'); });
   }
@@ -6928,18 +6962,26 @@ PD.registerLevel({
   // ------------------------------------------------------------------------
   function fmt(n) { return n >= 1000 ? (Math.round(n / 100) / 10) + 'k' : String(n); }
 
-  // One level row: difficulty badge, name and stats, Play button.
+  // One level row: difficulty badge, name and stats, Like and Play buttons.
   function row(e, from) {
     var r = el('div', 'level-row');
     r.appendChild(el('span', 'diff-badge d-' + e.difficulty, DIFF_LABEL[e.difficulty]));
     var name = el('div', 'grow', e.name);
     name.appendChild(el('small', '', 'by ' + e.author));
     var best = S.level('online-' + e.id).normal;
-    name.appendChild(el('small', '', fmt(e.downloads) + ' downloads   |   ' + fmt(e.likes) + ' likes   |   ' +
-      LEN_LABEL[e.length] + (best ? '   |   best ' + best + '%' : '')));
+    name.appendChild(el('small', '', fmt(e.plays) + ' plays   |   ' + LEN_LABEL[e.length] +
+      (best ? '   |   best ' + best + '%' : '')));
+    var like = el('button', 'btn pink', 'Like ' + fmt(e.likes));
+    like.onclick = function () {
+      if (e.sample) { G.toast('Sample levels cannot be liked'); return; }
+      if (!token()) { G.toast('Log in from Settings to like levels'); return; }
+      call('POST', '/levels/' + encodeURIComponent(e.id) + '/like').then(function (res) {
+        e.likes = res.likes; like.textContent = (res.liked ? 'Liked ' : 'Like ') + fmt(res.likes);
+      }, function (err) { G.toast(err.message); });
+    };
     var btn = el('button', 'btn green', 'Play');
     btn.onclick = function () { play(e, from); };
-    r.appendChild(name); r.appendChild(btn);
+    r.appendChild(name); r.appendChild(like); r.appendChild(btn);
     return r;
   }
   function fillList(box, levels, from, emptyText) {
@@ -6963,7 +7005,7 @@ PD.registerLevel({
   // Saved screen
   // ------------------------------------------------------------------------
   function renderSaved() {
-    fillList($('sv-list'), loadSaved(), 'saved', 'Nothing here yet. Play an online level from Search, Featured or Map Packs.');
+    fillList($('sv-list'), loadSaved().map(norm), 'saved', 'Nothing here yet. Play an online level from Search, Featured or Map Packs.');
   }
 
   // ------------------------------------------------------------------------
@@ -7036,8 +7078,8 @@ PD.registerLevel({
   // ------------------------------------------------------------------------
   // Search screen
   // ------------------------------------------------------------------------
-  var st = { sort: 'downloads', diffs: [], length: 'any', q: '', page: 0, levels: [], more: false, loaded: false };
-  var token = 0;                                      // Lets us ignore answers that arrive late.
+  var st = { sort: 'plays', diffs: [], length: 'any', q: '', page: 0, levels: [], more: false, loaded: false };
+  var searchToken = 0;                                // Lets us ignore answers that arrive late.
 
   function drawChips() {
     var sort = $('hs-sort'), diff = $('hs-diff'), len = $('hs-len');
@@ -7062,11 +7104,11 @@ PD.registerLevel({
 
   // reset = true starts from page 1, false adds the next page.
   function runSearch(reset) {
-    var mine = ++token, list = $('hs-list');
+    var mine = ++searchToken, list = $('hs-list');
     if (reset) { st.page = 0; st.levels = []; list.textContent = ''; list.appendChild(el('div', 'empty', 'Searching...')); }
     $('hs-more').classList.add('hidden');
     Online.search({ sort: st.sort, diffs: st.diffs, length: st.length, q: st.q, page: st.page }).then(function (r) {
-      if (mine !== token) return;
+      if (mine !== searchToken) return;
       st.levels = st.levels.concat(r.levels); st.more = r.more; st.loaded = true;
       setNote($('hs-note'));
       fillList(list, st.levels, 'search', 'No levels found. Try different filters.');
@@ -7087,10 +7129,60 @@ PD.registerLevel({
   }
 
   // ------------------------------------------------------------------------
+  // Publishing (the Publish button on My Levels calls Hub.publish)
+  // Steps: log in -> beat your own level in normal mode -> the level is saved
+  // as a draft and sent in for review -> an admin approves it.
+  // ------------------------------------------------------------------------
+  var MAP_KEY = 'popdash.publishedIds';               // Remembers which server level a local level became.
+  var pendingPublish = null;                          // The level the player must beat right now.
+
+  function loadMap() { try { return JSON.parse(root.localStorage.getItem(MAP_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function saveMap(m) { try { root.localStorage.setItem(MAP_KEY, JSON.stringify(m)); } catch (e) { /* Ignore. */ } }
+
+  Hub.publish = function (lv) {
+    if (!PD.Api.loggedIn()) {
+      UI.modal('Log in first', el('div', 'sub', 'Open Settings, then Account, and log in or make an account. Then you can publish.'), [{ text: 'OK' }]);
+      return;
+    }
+    if (lv.objects.length < 20) {
+      UI.modal('Too small', el('div', 'sub', 'A level needs at least 20 objects before it can be published.'), [{ text: 'OK' }]);
+      return;
+    }
+    var body = el('div', 'sub', 'First you have to beat "' + lv.name + '" in normal mode. That proves it can be finished. ' +
+      'After that it is sent to FallGameDev for review. If it is approved it shows up in Search. ' +
+      'If you published this level before, the new version replaces it once it is approved.');
+    UI.modal('Publish this level?', body, [
+      { text: 'Cancel' },
+      { text: 'Start', cls: 'green', fn: function () {
+        pendingPublish = { id: lv.id, level: lv };
+        UI.playLevel(lv, { from: 'custom' });          // Normal mode, so practice does not count.
+      } }
+    ]);
+  };
+
+  // ui.js calls this when any level is beaten.
+  Hub.onComplete = function (stats, playing) {
+    var p = pendingPublish;
+    if (!p || !playing || stats.practice || stats.test || playing.data.id !== p.id) return;
+    pendingPublish = null;
+    var map = loadMap(), lv = p.level;
+    G.toast('Sending your level in...');
+    call('POST', '/levels', { id: map[lv.id] || undefined, name: lv.name, data: lv }).then(function (res) {
+      map[lv.id] = res.level.id; saveMap(map);
+      return call('POST', '/levels/' + res.level.id + '/submit', { beaten: true });
+    }).then(function () {
+      G.toast('Sent for review. Thank you!');
+    }, function (err) {
+      G.toast(err.status === 409 ? 'That level was already sent in' : err.message);
+    });
+  };
+
+  // ------------------------------------------------------------------------
   // Hooks
   // ------------------------------------------------------------------------
-  // ui.js calls this every time a screen is shown.
+  // ui.js calls this every time a screen is shown (name is null while a level runs).
   Hub.onShow = function (name) {
+    if (name) pendingPublish = null;                  // Left the level without beating it: forget the publish.
     if (name === 'saved') renderSaved();
     if (name === 'event') renderEvent();
     if (name === 'featured') renderFeatured();
