@@ -809,6 +809,10 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
           <div><b>Show FPS</b><div class="sub left">Shows how many frames per second the game is running at, in the top left corner.</div></div>
           <button id="set-fps" class="switch" role="switch" aria-checked="false" aria-label="Show FPS"></button>
         </div>
+        <div class="row">
+          <div><b>Nexus</b><div class="sub left">A bot that plays every level for you. It looks ahead with the game's own physics, then presses the jump button for you. Pressing keys does nothing while it is on.</div></div>
+          <button id="set-nexus" class="switch" role="switch" aria-checked="false" aria-label="Nexus bot"></button>
+        </div>
         <div class="row"><span>Erase all progress</span><button id="set-reset" class="btn red">Reset</button></div>
         <div class="help">
           <b>Controls</b><br>
@@ -1752,6 +1756,76 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
   }
 
   PD.Sim = Sim;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+  <script>
+/* js/nexus.js */
+/* ==========================================================================
+   nexus.js
+   NEXUS is a bot that plays the level for you. Turn it on in Settings.
+
+   How it works: it uses the same physics (PD.Sim) as the game to "look ahead".
+   Every 8 physics ticks it picks hold or let go. If a choice leads to a crash
+   it rewinds and tries the other one (a depth first search), and it remembers
+   situations that always crash. When it reaches the finish line it has a full
+   list of button presses. The game then replays that list on the real run.
+   Plans are cached, so a level is only solved once per session.
+   ========================================================================== */
+(function (root) {
+  'use strict';
+  var PD = root.PD;
+  var N = PD.Nexus = { on: false, status: '' };
+  var cache = new WeakMap();           // level data -> plan for the start of the level
+
+  var DECIDE = 8;                      // Ticks between button choices.
+  var HAZ_PAD = 0.08;                  // Pretend hazards are a bit bigger so the bot stays safe.
+  var MAX_MS = 8000;                   // Give up after this long.
+
+  // A short label for "the same situation" so we never explore it twice.
+  function key(s, depth) {
+    var fly = s.mode === 'ship' || s.mode === 'ufo' || s.mode === 'wave';
+    return depth + '|' + Math.round(s.y * (fly ? 8 : 24)) + '|' + Math.round(s.vy * (fly ? 1 : 3)) + '|' +
+      s.g + s.mode[0] + s.mode[1] + s.speed + (s.mini ? 'm' : '') + (s.prevHold ? 'h' : '') +
+      (s.grounded ? 'g' : '') + (s.boost > 0 ? Math.round(s.boost * 30) : '') + '|' + s.coins.length;
+  }
+  // Which button choice to try first.
+  function order(s) {
+    return (s.mode === 'ship' || s.mode === 'wave') ? (s.y < 5 ? [true, false] : [false, true]) : [false, true];
+  }
+
+  /* Search for a list of hold / let go choices (one per 8 ticks) that wins.
+     startState is a Sim state (from sim.getState()). Returns an array or null. */
+  function solve(level, startState) {
+    var sim = new PD.Sim(level, { silent: true, hazPad: HAZ_PAD });
+    var bad = new Set(), stack = [], t0 = Date.now(), nodes = 0;
+    stack.push({ state: startState, tries: null, idx: 0, hold: false });
+    while (stack.length) {
+      var top = stack[stack.length - 1];
+      if (!top.tries) top.tries = order(top.state);
+      if (top.idx >= top.tries.length) { bad.add(key(top.state, stack.length - 1)); stack.pop(); continue; }
+      var hold = top.tries[top.idx++];
+      sim.setState(top.state);
+      for (var i = 0; i < DECIDE && !sim.dead && !sim.won; i++) sim.step(hold);
+      if ((++nodes & 1023) === 0 && Date.now() - t0 > MAX_MS) return null;
+      if (sim.dead) continue;
+      if (sim.won) return stack.slice(1).map(function (n) { return n.hold; }).concat([hold]);
+      var st = sim.getState();
+      if (bad.has(key(st, stack.length))) continue;
+      stack.push({ state: st, tries: null, idx: 0, hold: hold });
+    }
+    return null;
+  }
+
+  /* Make a plan for the current moment of a run. Returns an array of holds or null.
+     fromStart = true when the run is at the very start (those plans are cached). */
+  N.plan = function (level, sim, fromStart) {
+    if (fromStart && cache.has(level.data)) return cache.get(level.data);
+    var plan = solve(level, sim.getState());
+    if (fromStart) cache.set(level.data, plan);
+    return plan;
+  };
+  N.DECIDE = DECIDE;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -3016,7 +3090,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
       owned: {},                          // Icons bought in the shop, like { 'ship:5': true }
       stats: { deaths: 0, ballsEarned: 0, flawless: false },   // Counters used by achievements.
       ach: {},                            // Unlocked achievements: { id: time it was unlocked }
-      settings: { music: 0.7, sfx: 0.8, lowPerf: false, showFps: false },
+      settings: { music: 0.7, sfx: 0.8, lowPerf: false, showFps: false, nexus: false },
       custom: []                          // Levels made in the editor.
     };
   }
@@ -3041,7 +3115,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     if (!data.stats) data.stats = { deaths: 0, ballsEarned: 0, flawless: false };
     if (!data.ach) data.ach = {};
     // Settings added later (old saves do not have them).
-    data.settings = Object.assign({ music: 0.7, sfx: 0.8, lowPerf: false, showFps: false }, data.settings);
+    data.settings = Object.assign({ music: 0.7, sfx: 0.8, lowPerf: false, showFps: false, nexus: false }, data.settings);
     return data;
   };
 
@@ -3586,6 +3660,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   var state = 'idle', paused = false;
   var level = null, sim = null, opts = {};
   var hold = false;                 // Is the jump button down right now?
+  var nexusPlan = null, nexusTick = 0;   // NEXUS bot: the list of button choices and how many ticks have passed
   var last = 0, acc = 0, time = 0, frame = 0;
   var cam = { x: 0, y: -2 };
   var bg = { cur: '#1b1147', target: '#1b1147' }, blockColor = '#7c5cff';
@@ -3649,6 +3724,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   G.applySettings = function () {
     var st = PD.Save.get().settings;
     lowPerf = !!st.lowPerf; fpsOn = !!st.showFps;
+    PD.Nexus.on = !!st.nexus;          // Nexus bot on or off (takes effect on the next attempt)
     R.lowPerf = lowPerf;
     root.document.body.classList.toggle('low-perf', lowPerf);
     fpsEl = fpsEl || root.document.getElementById('fps');
@@ -3695,7 +3771,16 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     if (cp) { sim.setState(cp.state); bg.cur = bg.target = cp.bg; }
     else { sim.reset(); bg.cur = bg.target = level.data.bg || PD.BG_COLORS[0]; }
     // If the button is still held from the last try, do not count it as a new tap.
+    if (PD.Nexus.on) hold = false;
     sim.prevHold = hold;
+    // NEXUS: work out every button press for this attempt before it starts.
+    nexusPlan = null; nexusTick = 0;
+    if (PD.Nexus.on) {
+      nexusPlan = PD.Nexus.plan(level, sim, !cp);
+      $('hud-mode').textContent = nexusPlan ? 'NEXUS' : 'NEXUS: no path found';
+    } else {
+      $('hud-mode').textContent = opts.practice ? 'PRACTICE' : (opts.test ? 'TEST' : '');
+    }
     parts.length = 0; rings.length = 0; trail.length = 0; zips.length = 0;
     deadT = 0; winT = 0; cpClock = 0; shake = 0; acc = 0;
     mirrorAmt = sim.mirror ? 1 : 0;
@@ -3774,7 +3859,9 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     while (acc >= PD.TICK) {
       acc -= PD.TICK;
       if (sim.dead || sim.won) break;
-      sim.step(hold);
+      var h = hold;
+      if (nexusPlan) { var k = Math.floor(nexusTick / PD.Nexus.DECIDE); h = k < nexusPlan.length ? nexusPlan[k] : false; nexusTick++; }
+      sim.step(h);
       if (sim.events.length) { for (var i = 0; i < sim.events.length; i++) onEvent(sim.events[i]); sim.events.length = 0; }
     }
 
@@ -4974,6 +5061,7 @@ PD.FACES = {
     $('set-sfx').value = st.sfx;
     setSwitch($('set-lowperf'), st.lowPerf);
     setSwitch($('set-fps'), st.showFps);
+    setSwitch($('set-nexus'), st.nexus);
     showSetTab(setTab);
   }
 
@@ -5351,6 +5439,12 @@ PD.FACES = {
     $('set-fps').onclick = function () {
       var st = S.get().settings; st.showFps = !st.showFps; S.write();
       setSwitch(this, st.showFps); PD.Game.applySettings();
+    };
+
+    // Nexus: the bot that plays for you
+    $('set-nexus').onclick = function () {
+      var st = S.get().settings; st.nexus = !st.nexus; S.write();
+      setSwitch(this, st.nexus); PD.Game.applySettings();
     };
 
     // The Settings tabs
