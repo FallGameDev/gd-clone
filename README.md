@@ -72,4 +72,6 @@ node tools/peek.js level1 0 60   # print a text picture of part of a level
 
 Change `PD.GAME_NAME` in `js/objects.js`, plus the title and logo text in `index.html`.
 
-Made by Wildcard Studios.
+Made by Here Studios.
+
+(hey go check out the link but with /soggy :))
