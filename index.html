@@ -386,6 +386,13 @@ body.low-perf .pd-blk, body.low-perf .pd-sky::before, body.low-perf .ik-photo, b
     linear-gradient(#fff, #fff) bottom right / 14px 4px no-repeat, linear-gradient(#fff, #fff) bottom right / 4px 14px no-repeat; }
 .ik-panel .swatches { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 8px; }
 #icon-more { margin-top: 10px; text-align: center; color: var(--muted); font-size: clamp(13px, 2.2vh, 17px); }
+.soggy { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: #000; overflow: hidden; }
+.soggy.hidden { display: none; }
+/* The same photo, blown up and blurred, fills any empty edges so the picture always covers the whole screen */
+.soggy-bg { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(26px) brightness(.55); }
+.soggy-img { position: relative; width: 100%; height: 100%; object-fit: contain; animation: soggy-bop .46s ease-in-out infinite alternate; }   /* Bounces to the jig */
+@keyframes soggy-bop { from { transform: scale(1) rotate(-.6deg); } to { transform: scale(1.025) rotate(.6deg); } }
+@media (prefers-reduced-motion: reduce) { .soggy-img { animation: none; } }
 .ik-pic { display: grid; place-items: center; } .ik-pic img { max-width: 100%; max-height: 58vh; border: 5px solid var(--ink); border-radius: 14px; box-shadow: 0 8px 0 rgba(0, 0, 0, .5); }
 @media (max-width: 760px) { .ik-photo { right: 76px; } .ik-shop { left: 70px; } .ik-name { max-width: 34vw; } }
 
@@ -1170,6 +1177,12 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
   </div>
 
   <!-- ================= Pop-up box used by the editor ================= -->
+  <!-- Full screen photo. Opens from the hanging sign on the icon kit, plays a little jig. -->
+  <div id="soggy" class="soggy hidden" role="dialog" aria-label="Surprise photo">
+    <div id="soggy-bg" class="soggy-bg"></div>
+    <img id="soggy-img" class="soggy-img" alt="A surprise photo" draggable="false">
+    <button id="soggy-back" class="pd-back" aria-label="Back">Back</button>
+  </div>
   <div id="overlay-modal" class="overlay hidden">
     <div class="card wide">
       <h2 id="md-title"></h2>
@@ -5286,16 +5299,27 @@ PD.FACES = {
     });
   }
 
-  // Click the hanging photo sign: show a random photo big. "Another one" swaps it.
-  function openPhoto() {
-    photoSrc = randomPic(photoSrc);
+  // Click the hanging photo sign: the photo fills the whole screen and a little jig plays.
+  // The photo is picked at random each time (the sign always shows the one that will open).
+  var jig = null;
+  function openSoggy() {
+    $('soggy-img').src = photoSrc;
+    $('soggy-bg').style.backgroundImage = 'url(' + photoSrc + ')';
+    $('soggy').classList.remove('hidden');
+    A.unlock(); A.stopMusic();                       // Pause the menu music while the jig plays
+    jig = new Audio('audio/soggy.mp3');
+    jig.loop = true;
+    var vol = S.get().settings.music;
+    jig.volume = typeof vol === 'number' ? Math.max(0, Math.min(1, vol)) : 0.7;
+    jig.play().catch(function () {});
+  }
+  function closeSoggy() {
+    if ($('soggy').classList.contains('hidden')) return;
+    if (jig) { jig.pause(); jig = null; }
+    $('soggy').classList.add('hidden');
+    photoSrc = randomPic(photoSrc);                  // Roll a new photo for next time
     $('ik-photo-img').src = photoSrc;
-    var body = el('div', 'ik-pic'), img = el('img'); img.src = photoSrc; img.alt = 'A surprise photo';
-    body.appendChild(img);
-    UI.modal('Surprise!', body, [
-      { text: 'Another one', cls: 'pink', fn: function () { photoSrc = randomPic(photoSrc); img.src = photoSrc; $('ik-photo-img').src = photoSrc; return false; } },
-      { text: 'Close', cls: 'blue' }
-    ]);
+    G.menuMusic();                                   // Bring the menu music back
   }
 
   // What the shopkeeper says in his speech bubble.
@@ -5734,7 +5758,9 @@ PD.FACES = {
     $('lv-ghost-l').onclick = function () { shiftLevel(-1); };
     $('lv-ghost-r').onclick = function () { shiftLevel(1); };
     // Icon kit and shop extras
-    $('ik-photo').onclick = openPhoto;
+    $('ik-photo').onclick = openSoggy;
+    $('soggy-back').onclick = closeSoggy;
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSoggy(); });
     $('ik-palette').onclick = function () { kitView = kitView === 'icons' ? 'colors' : 'icons'; renderIcons(); };
     $('shop-prev').onclick = function () { shiftShop(-1); };
     $('shop-next').onclick = function () { shiftShop(1); };
