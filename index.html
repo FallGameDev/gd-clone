@@ -972,6 +972,7 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
       <button id="ed-redo" class="btn">Redo</button>
       <button id="ed-settings" class="btn yellow">Setup</button>
       <button id="ed-export" class="btn blue">Export</button>
+      <button id="ed-preview" class="btn blue" title="Play the music and scroll along with it. Click again or press any key to stop.">Preview</button>
       <button id="ed-test" class="btn green">Test</button>
       <button id="ed-save" class="btn pink">Save</button>
     </div>
@@ -2930,7 +2931,14 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   // Play a sound file in a loop. If it cannot load, fall back to the tune the code writes.
   function playFile(url, fromWeb, def, opts, token) {
     var el = fileEl = new Audio(url);
-    el.loop = true; el.volume = vol.music;
+    el.loop = opts.loop !== false; el.volume = vol.music;
+    // Start partway through the song (used by the editor's music preview).
+    if (opts.startAt > 0) {
+      el._startAt = opts.startAt;
+      var seek = function () { try { el.currentTime = opts.startAt; } catch (e) {} };
+      el.addEventListener('loadedmetadata', seek);
+      seek();
+    }
     el.addEventListener('error', function () {
       if (token !== musicToken || fileEl !== el) return;
       fileEl = null;
@@ -2945,6 +2953,9 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     if (!ctx) return;
     song = writeSong(def, !!opts.calm);
     song.nextTime = song.startTime = ctx.currentTime + 0.06;
+    // Start partway through the tune (editor preview): skip ahead by whole sixteenth notes.
+    song.offset = 0;
+    if (opts.startAt > 0) { song.step = Math.floor(opts.startAt / song.stepDur); song.offset = song.step * song.stepDur; }
     // Fade in so restarts do not click.
     musicGain.gain.cancelScheduledValues(ctx.currentTime);
     musicGain.gain.setValueAtTime(0.0001, ctx.currentTime);
@@ -2965,6 +2976,20 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     a.preload = 'auto'; a.src = A.ngUrl(src.id);
   };
 
+  /* Where the music is right now, in seconds from the start of the song.
+     Returns null while a file is still loading or seeking, so callers can wait. */
+  A.musicTime = function () {
+    if (song && ctx) return (song.offset || 0) + Math.max(0, ctx.currentTime - song.startTime);
+    if (fileEl) {
+      if (fileEl.readyState < 2) return null;
+      if (fileEl.paused && !fileEl.ended) return null;
+      if (fileEl._startAt && fileEl.currentTime < fileEl._startAt - 1) return null;   // Seek has not finished.
+      return fileEl.currentTime;
+    }
+    return null;
+  };
+  A.musicDone = function () { return !!(fileEl && fileEl.ended); };
+
   A.stopMusic = function () {
     if (timer) { clearInterval(timer); timer = null; }
     song = null;
@@ -2984,7 +3009,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   A.beat = function () {
     if (!A.current) return 0;
     var t;
-    if (song && ctx) t = ctx.currentTime - song.startTime;
+    if (song && ctx) t = ctx.currentTime - song.startTime + (song.offset || 0);
     else if (fileEl) t = fileEl.currentTime;
     else t = (root.performance ? performance.now() : Date.now()) / 1000 - A.current.started;
     var b = t * A.current.def.bpm / 60;
@@ -4165,6 +4190,68 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   var hover = null;                   // Grid cell under the mouse.
   var drag = null;                    // What the current mouse drag is doing.
   var time = 0, last = 0;
+  var pv = null;                      // Music preview: null, or { t0, wall } while it plays.
+
+  // ------------------------------------------------------------------------
+  // Music preview (like the GD editor): a line at the left of the screen plays the music,
+  // and the view scrolls forward with it. The level's speed portals change how fast it goes.
+  // ------------------------------------------------------------------------
+  function previewLineX() { return Math.round(PD.Game.size().W * 0.22); }   // Where the line sits on screen (pixels).
+
+  // The speed in each stretch of the level: [{ x, sp }], sorted. Speed portals change it.
+  function speedStretches() {
+    var list = [{ x: 0, sp: lv.speed | 0 }];
+    lv.objects.filter(function (o) { return PD.TYPES[o.t] && PD.TYPES[o.t].speed != null; })
+      .sort(function (a, b) { return a.x - b.x; })
+      .forEach(function (o) { list.push({ x: o.x, sp: PD.TYPES[o.t].speed }); });
+    return list;
+  }
+  // Seconds it takes the player to reach block x.
+  function timeAtX(x) {
+    var st = speedStretches(), t = 0;
+    for (var i = 0; i < st.length; i++) {
+      var from = st[i].x, to = i + 1 < st.length ? st[i + 1].x : Infinity;
+      if (x <= from) break;
+      t += (Math.min(x, to) - from) / PD.SPEEDS[st[i].sp];
+    }
+    return t;
+  }
+  // The block where the player is after t seconds (the opposite of timeAtX).
+  function xAtTime(t) {
+    var st = speedStretches(), x = 0;
+    for (var i = 0; i < st.length; i++) {
+      var from = st[i].x, to = i + 1 < st.length ? st[i + 1].x : Infinity;
+      var v = PD.SPEEDS[st[i].sp], need = (to - from) / v;
+      if (t <= need || to === Infinity) return from + t * v;
+      t -= need; x = to;
+    }
+    return x;
+  }
+
+  function setPreviewButton() { $('ed-preview').textContent = pv ? 'Stop' : 'Preview'; }
+  function startPreview() {
+    var x0 = Math.max(0, cam.x + previewLineX() / u);       // Start from the line's current spot.
+    var t0 = timeAtX(x0);
+    A.unlock();
+    A.playMusic(lv.song, { source: lv.music, startAt: t0, loop: false });
+    pv = { t0: t0, wall: performance.now() };
+    setPreviewButton();
+  }
+  function stopPreview() {
+    if (!pv) return;
+    pv = null; A.stopMusic(); setPreviewButton();
+  }
+  // Called every frame while previewing: move the view to match the music.
+  function updatePreview() {
+    var mt = A.musicTime();
+    if (mt == null) {                                       // Still loading. Give up after a few seconds.
+      if (performance.now() - pv.wall > 8000) { stopPreview(); PD.Game.toast('The music would not play'); }
+      return;
+    }
+    var x = xAtTime(mt);
+    cam.x = x - previewLineX() / u;
+    if (x > levelEnd() + 2 || A.musicDone()) stopPreview();
+  }
 
   // Only these objects look different when turned.
   var CAN_TURN = { slope: 1, slab: 1, spike: 1, spikeS: 1, thorn: 1, padY: 1, padP: 1, padR: 1, padB: 1, dArrow: 1 };
@@ -4190,7 +4277,8 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   // Come back to the editor (also used after a test play).
   E.resume = function () {
     PD.Game.setOff(true);
-    A.stopMusic();
+    pv = null; A.stopMusic();
+    setPreviewButton();
     PD.UI.show('editor');
     active = true;
     buildPalette();
@@ -4200,6 +4288,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   };
 
   function close() {
+    stopPreview();
     active = false;
     PD.Game.setOff(false);
     PD.Game.menuMusic();
@@ -4522,6 +4611,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     if (!active) return;
     requestAnimationFrame(loop);
     time += Math.min(0.05, (now - last) / 1000); last = now;
+    if (pv) updatePreview();
     draw();
   }
 
@@ -4578,6 +4668,18 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
     ctx.fillText('START', (0 - cam.x) * u, H - (1.5 - cam.y) * u);
     ctx.fillText('FINISH', (end + 0.25 - cam.x) * u, H - (-0.6 - cam.y) * u);
+    // The preview line: this is where the player would be.
+    if (pv) {
+      var lx = previewLineX();
+      var grad = ctx.createLinearGradient(lx - 8, 0, lx + 8, 0);
+      grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.9)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad; ctx.fillRect(lx - 8, 0, 16, H);
+      ctx.fillStyle = '#ffe14d';
+      ctx.beginPath(); ctx.moveTo(lx - 9, 6); ctx.lineTo(lx + 9, 6); ctx.lineTo(lx, 20); ctx.closePath(); ctx.fill();
+      var mt = A.musicTime();
+      ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff';
+      ctx.fillText(mt == null ? 'loading music...' : mt.toFixed(1) + ' s', lx + 14, 18);
+    }
     ctx.fillStyle = 'rgba(77,210,255,0.9)'; ctx.textAlign = 'left';
     ctx.fillText('tunnel ceiling (ship, ball, UFO, wave, spider)', 70, H - (PD.CEIL + 0.15 - cam.y) * u);
 
@@ -4607,6 +4709,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     canvas.addEventListener('pointerdown', function (e) {
       if (!active) return;
       e.preventDefault();
+      if (pv) { stopPreview(); return; }      // A click while previewing just stops it.
       canvas.setPointerCapture(e.pointerId);
       var panning = tool === 'pan' || e.button === 1 || e.button === 2;
       if (panning) drag = { pan: true, x: e.clientX, y: e.clientY };
@@ -4637,12 +4740,14 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     canvas.addEventListener('wheel', function (e) {
       if (!active) return;
       e.preventDefault();
+      if (pv) stopPreview();
       zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
     }, { passive: false });
 
     root.addEventListener('keydown', function (e) {
       if (!active || !$('overlay-modal').classList.contains('hidden')) return;
       if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+      if (pv) { stopPreview(); e.preventDefault(); return; }   // Any key stops the preview.
       var ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) doRedo(); else doUndo(); return; }
       if (ctrl && e.code === 'KeyY') { e.preventDefault(); doRedo(); return; }
@@ -4669,11 +4774,13 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     $('ed-zout').onclick = function () { zoom(1 / 1.2); };
     $('ed-undo').onclick = doUndo;
     $('ed-redo').onclick = doRedo;
-    $('ed-settings').onclick = openSetup;
-    $('ed-export').onclick = openExport;
+    $('ed-preview').onclick = function () { if (pv) stopPreview(); else startPreview(); };
+    $('ed-settings').onclick = function () { stopPreview(); openSetup(); };
+    $('ed-export').onclick = function () { stopPreview(); openExport(); };
     $('ed-save').onclick = save;
     $('ed-name').oninput = function () { dirty = true; };
     $('ed-test').onclick = function () {
+      stopPreview();
       lv.name = ($('ed-name').value || 'My Level').slice(0, 24);
       active = false;
       PD.UI.playLevel(clone(lv), { test: true });
@@ -7774,9 +7881,9 @@ PD.registerLevel({
 </script>
   <script>
 /* levels/level6.js */
-/* Built-in level. Made by tools/build-level5.js, so edit that file
-   instead of this one. Each object: t = type, x and y = grid position,
-   r = quarter turns, w and h = size in blocks. */
+/* Built-in level: Press Start. Started from tools/build-level6.js, then edited in the
+   level editor, so this file is now the real copy (edit it or re-export from the editor).
+   Each object: t = type, x and y = grid position, r = quarter turns, w and h = size in blocks. */
 PD.registerLevel({
   "id": "level6",
   "name": "Press Start",
@@ -7854,8 +7961,6 @@ PD.registerLevel({
     {"t":"slope","x":174,"y":1,"r":1},
     {"t":"slope","x":175,"y":0,"r":1},
     {"t":"saw","x":185,"y":0},
-    {"t":"spike","x":195,"y":0},
-    {"t":"spike","x":196,"y":0},
     {"t":"padY","x":206,"y":0},
     {"t":"brick","x":209,"y":2,"w":6},
     {"t":"spikeS","x":210,"y":0},
@@ -7923,10 +8028,6 @@ PD.registerLevel({
     {"t":"brick","x":415,"y":5,"h":5},
     {"t":"spikeS","x":415,"y":1},
     {"t":"spikeS","x":415,"y":4,"r":2},
-    {"t":"brick","x":424,"y":0,"h":3},
-    {"t":"brick","x":424,"y":7,"h":3},
-    {"t":"spikeS","x":424,"y":3},
-    {"t":"spikeS","x":424,"y":6,"r":2},
     {"t":"brick","x":433,"y":0,"h":4},
     {"t":"brick","x":433,"y":8,"h":2},
     {"t":"spikeS","x":433,"y":4},
@@ -7935,7 +8036,6 @@ PD.registerLevel({
     {"t":"brick","x":442,"y":6,"h":4},
     {"t":"spikeS","x":442,"y":2},
     {"t":"spikeS","x":442,"y":5,"r":2},
-    {"t":"coin","x":421,"y":6},
     {"t":"brick","x":451,"y":0,"h":3},
     {"t":"brick","x":451,"y":7,"h":3},
     {"t":"spikeS","x":451,"y":3},
@@ -8736,10 +8836,140 @@ PD.registerLevel({
     {"t":"brick","x":2491,"y":3,"h":7},
     {"t":"spike","x":2499,"y":0},
     {"t":"block","x":2508,"y":0,"w":3},
-    {"t":"spike","x":2511,"y":0}
+    {"t":"spike","x":2511,"y":0},
+    {"t":"tBg4","x":91,"y":1},
+    {"t":"pWave","x":186,"y":2},
+    {"t":"slope","x":190,"y":0},
+    {"t":"slope","x":191,"y":1},
+    {"t":"slope","x":192,"y":2},
+    {"t":"slope","x":193,"y":3},
+    {"t":"slope","x":194,"y":3,"r":1},
+    {"t":"slope","x":195,"y":2,"r":1},
+    {"t":"slope","x":196,"y":1,"r":1},
+    {"t":"slope","x":197,"y":0,"r":1},
+    {"t":"slope","x":189,"y":1,"r":2},
+    {"t":"slope","x":190,"y":2,"r":2},
+    {"t":"slope","x":191,"y":3,"r":2},
+    {"t":"slope","x":192,"y":4,"r":2},
+    {"t":"slope","x":193,"y":5,"r":2},
+    {"t":"slope","x":194,"y":5,"r":3},
+    {"t":"slope","x":195,"y":4,"r":3},
+    {"t":"slope","x":196,"y":3,"r":3},
+    {"t":"slope","x":197,"y":2,"r":3},
+    {"t":"slope","x":198,"y":1,"r":3},
+    {"t":"block","x":191,"y":0},
+    {"t":"block","x":192,"y":0},
+    {"t":"block","x":193,"y":0},
+    {"t":"block","x":194,"y":0},
+    {"t":"block","x":196,"y":0},
+    {"t":"block","x":195,"y":0},
+    {"t":"block","x":195,"y":1},
+    {"t":"block","x":194,"y":1},
+    {"t":"block","x":192,"y":1},
+    {"t":"block","x":193,"y":1},
+    {"t":"block","x":193,"y":2},
+    {"t":"block","x":194,"y":2},
+    {"t":"block","x":189,"y":2},
+    {"t":"block","x":189,"y":3},
+    {"t":"block","x":189,"y":4},
+    {"t":"block","x":189,"y":5},
+    {"t":"block","x":189,"y":6},
+    {"t":"block","x":189,"y":7},
+    {"t":"block","x":189,"y":8},
+    {"t":"block","x":189,"y":9},
+    {"t":"block","x":190,"y":9},
+    {"t":"block","x":190,"y":8},
+    {"t":"block","x":190,"y":7},
+    {"t":"block","x":190,"y":6},
+    {"t":"block","x":190,"y":5},
+    {"t":"block","x":190,"y":4},
+    {"t":"block","x":190,"y":3},
+    {"t":"block","x":191,"y":4},
+    {"t":"block","x":191,"y":5},
+    {"t":"block","x":191,"y":6},
+    {"t":"block","x":191,"y":9},
+    {"t":"block","x":191,"y":8},
+    {"t":"block","x":191,"y":7},
+    {"t":"block","x":192,"y":7},
+    {"t":"block","x":192,"y":6},
+    {"t":"block","x":192,"y":5},
+    {"t":"block","x":198,"y":2},
+    {"t":"block","x":198,"y":3},
+    {"t":"block","x":198,"y":4},
+    {"t":"block","x":198,"y":5},
+    {"t":"block","x":198,"y":6},
+    {"t":"block","x":198,"y":7},
+    {"t":"block","x":198,"y":8},
+    {"t":"block","x":198,"y":9},
+    {"t":"block","x":197,"y":9},
+    {"t":"block","x":196,"y":9},
+    {"t":"block","x":195,"y":9},
+    {"t":"block","x":194,"y":9},
+    {"t":"block","x":193,"y":9},
+    {"t":"block","x":192,"y":9},
+    {"t":"block","x":192,"y":8},
+    {"t":"block","x":193,"y":8},
+    {"t":"block","x":193,"y":7},
+    {"t":"block","x":193,"y":6},
+    {"t":"block","x":194,"y":6},
+    {"t":"block","x":195,"y":6},
+    {"t":"block","x":195,"y":5},
+    {"t":"block","x":196,"y":5},
+    {"t":"block","x":196,"y":4},
+    {"t":"block","x":197,"y":3},
+    {"t":"block","x":197,"y":4},
+    {"t":"block","x":197,"y":5},
+    {"t":"block","x":197,"y":6},
+    {"t":"block","x":197,"y":7},
+    {"t":"block","x":197,"y":8},
+    {"t":"block","x":196,"y":8},
+    {"t":"block","x":195,"y":8},
+    {"t":"block","x":194,"y":8},
+    {"t":"block","x":194,"y":7},
+    {"t":"block","x":195,"y":7},
+    {"t":"block","x":196,"y":7},
+    {"t":"block","x":196,"y":6},
+    {"t":"pCube","x":198,"y":0},
+    {"t":"pRobot","x":287,"y":4},
+    {"t":"spike","x":298,"y":0},
+    {"t":"spike","x":299,"y":0},
+    {"t":"spike","x":300,"y":0},
+    {"t":"spike","x":297,"y":1},
+    {"t":"spike","x":298,"y":1},
+    {"t":"spike","x":299,"y":1},
+    {"t":"slope","x":304,"y":0},
+    {"t":"saw","x":306,"y":0},
+    {"t":"sawL","x":308,"y":0},
+    {"t":"saw","x":310,"y":0},
+    {"t":"slope","x":312,"y":0,"r":1},
+    {"t":"spike","x":318,"y":0},
+    {"t":"spike","x":320,"y":0},
+    {"t":"spike","x":319,"y":0},
+    {"t":"spike","x":321,"y":0},
+    {"t":"spike","x":322,"y":0},
+    {"t":"spike","x":323,"y":0},
+    {"t":"spike","x":324,"y":0},
+    {"t":"spike","x":318,"y":4,"r":2},
+    {"t":"spike","x":319,"y":5,"r":2},
+    {"t":"spike","x":320,"y":5,"r":2},
+    {"t":"spike","x":321,"y":5,"r":2},
+    {"t":"spike","x":322,"y":5,"r":2},
+    {"t":"spike","x":323,"y":5,"r":2},
+    {"t":"spike","x":324,"y":4,"r":2},
+    {"t":"orbR","x":321,"y":2},
+    {"t":"pUfo","x":370,"y":6},
+    {"t":"sawL","x":377,"y":0},
+    {"t":"sawL","x":386,"y":8},
+    {"t":"sawL","x":395,"y":3},
+    {"t":"sawL","x":404,"y":8},
+    {"t":"pCube","x":406,"y":5},
+    {"t":"spike","x":422,"y":0},
+    {"t":"spike","x":423,"y":0},
+    {"t":"spike","x":424,"y":0},
+    {"t":"pShip","x":423,"y":2},
+    {"t":"coin","x":437,"y":5}
   ]
 });
-
 </script>
   <script>
 /* js/hub.js */
