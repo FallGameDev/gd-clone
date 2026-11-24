@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>soggy :)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+
+    img {
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      display: block;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <img id="media-img" src="https://github.com/capeling/soggy-mod/blob/main/resources/bgs/SM_sog_001.png?raw=true" alt="sog :)" />
+  <audio id="media-audio" src="https://github.com/FallGameDev/gd-clone/raw/refs/heads/main/audio/soggy.mp3" loop></audio>
+
+  <script>
+    const img = document.getElementById("media-img");
+    const audio = document.getElementById("media-audio");
+
+    img.addEventListener("click", async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (err) {
+        console.error("Fullscreen error:", err);
+      }
+
+      try {
+        if (audio.paused) {
+          await audio.play();
+        }
+      } catch (err) {
+        console.error("Audio error:", err);
+      }
+    });
+  </script>
+</body>
+</html>
