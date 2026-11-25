@@ -396,6 +396,14 @@ body.low-perf .pd-blk, body.low-perf .pd-sky::before, body.low-perf .ik-photo, b
 .ik-pic { display: grid; place-items: center; } .ik-pic img { max-width: 100%; max-height: 58vh; border: 5px solid var(--ink); border-radius: 14px; box-shadow: 0 8px 0 rgba(0, 0, 0, .5); }
 @media (max-width: 760px) { .ik-photo { right: 76px; } .ik-shop { left: 70px; } .ik-name { max-width: 34vw; } }
 
+/* ----- Publish check (Nexus) ----- */
+.nx-bar { height: 20px; margin: 12px 0 6px; border: 4px solid var(--ink); border-radius: 999px; background: #1a1050; overflow: hidden; }
+.nx-bar i { display: block; height: 100%; width: 0; background: linear-gradient(#7dffa9, #2fd16a); transition: width .15s; }
+.nx-label { font-size: 13px; } .nx-problem { color: #ff9aa5; margin-top: 6px; }
+/* Red banner in the editor when Nexus found a problem */
+.ed-flag { position: absolute; z-index: 8; left: 50%; top: 66px; transform: translateX(-50%); width: min(92vw, 640px); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; padding: 10px 14px; background: #3a0d1a; border: 4px solid #ff4d5e; border-radius: 16px; box-shadow: 0 6px 0 rgba(0, 0, 0, .5); color: #fff; font-size: 14px; }
+.ed-flag.hidden { display: none; } .ed-flag b { flex: 1 1 260px; font-weight: 600; } .ed-flag .btn { padding: 4px 12px; font-size: 14px; }
+
 /* ----- Shop (wooden shelves, Pop Dash colors) ----- */
 #screen-shop { --tint: #ff9d2e; }
 .sh-top { position: relative; z-index: 2; width: min(94vw, 900px); height: clamp(120px, 24vh, 220px); flex: none; }
@@ -1145,6 +1153,10 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
       <button id="ed-rot" class="btn" title="Rotate (Q or E)">Turn</button>
       <button id="ed-zin" class="btn" title="Zoom in">+</button>
       <button id="ed-zout" class="btn" title="Zoom out">-</button>
+    </div>
+    <div id="ed-flag" class="ed-flag hidden" role="alert">
+      <b id="ed-flag-text"></b>
+      <span><button id="ed-flag-next" class="btn blue">Next</button> <button id="ed-flag-ok" class="btn">Dismiss</button></span>
     </div>
     <div id="ed-status" class="ed-status"></div>
     <div class="ed-bottom">
@@ -1933,6 +1945,7 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
 /* ==========================================================================
    nexus.js
    NEXUS is a bot that plays the level for you. Turn it on in Settings.
+   It is also what checks a level before it gets published (Hub.publish).
 
    How it works: it uses the same physics (PD.Sim) as the game to "look ahead".
    Every 8 physics ticks it picks hold or let go. If a choice leads to a crash
@@ -1940,6 +1953,11 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
    situations that always crash. When it reaches the finish line it has a full
    list of button presses. The game then replays that list on the real run.
    Plans are cached, so a level is only solved once per session.
+
+   Two jobs use the search:
+     N.plan(...)    makes a plan right now (Nexus Mode in Settings)
+     N.verify(...)  checks a level in small time slices so the screen stays alive,
+                    can require every coin, and says WHERE a level is impossible
    ========================================================================== */
 (function (root) {
   'use strict';
@@ -1949,7 +1967,7 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
 
   var DECIDE = 8;                      // Ticks between button choices.
   var HAZ_PAD = 0.08;                  // Pretend hazards are a bit bigger so the bot stays safe.
-  var MAX_MS = 8000;                   // Give up after this long.
+  var MAX_MS = 8000;                   // Nexus Mode gives up after this long.
 
   // A short label for "the same situation" so we never explore it twice.
   function key(s, depth) {
@@ -1963,12 +1981,26 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
     return (s.mode === 'ship' || s.mode === 'wave') ? (s.y < 5 ? [true, false] : [false, true]) : [false, true];
   }
 
-  /* Search for a list of hold / let go choices (one per 8 ticks) that wins.
-     startState is a Sim state (from sim.getState()). Returns an array or null. */
-  function solve(level, startState) {
-    var sim = new PD.Sim(level, { silent: true, hazPad: HAZ_PAD });
-    var bad = new Set(), stack = [], t0 = Date.now(), nodes = 0;
-    stack.push({ state: startState, tries: null, idx: 0, hold: false });
+  /* ------------------------------------------------------------------------
+     Search: one depth first search that can be run in small slices of time.
+     opts.coins = list of coin numbers that MUST be collected (omit for none).
+     After run(ms):  state is 'running', 'won' or 'exhausted' (no way exists).
+     ------------------------------------------------------------------------ */
+  function Search(level, opts) {
+    opts = opts || {};
+    this.level = level;
+    this.sim = new PD.Sim(level, { silent: true, hazPad: HAZ_PAD });
+    var need = opts.coins || [];
+    this.need = level.objs.filter(function (o) { return o.cat === 'coin' && need.indexOf(o.coinIndex) >= 0; });
+    var start = opts.startState;
+    if (!start) { this.sim.reset(); this.sim.prevHold = false; start = this.sim.getState(); }
+    this.stack = [{ state: start, tries: null, idx: 0, hold: false }];
+    this.bad = new Set();
+    this.nodes = 0; this.farthest = 0; this.farY = 0;
+    this.state = 'running'; this.plan = null;
+  }
+  Search.prototype.run = function (ms) {
+    var sim = this.sim, stack = this.stack, bad = this.bad, t0 = Date.now();
     while (stack.length) {
       var top = stack[stack.length - 1];
       if (!top.tries) top.tries = order(top.state);
@@ -1976,27 +2008,115 @@ body.low-perf .logo, body.low-perf .keeper, body.low-perf .soc-icons, body.low-p
       var hold = top.tries[top.idx++];
       sim.setState(top.state);
       for (var i = 0; i < DECIDE && !sim.dead && !sim.won; i++) sim.step(hold);
-      if ((++nodes & 1023) === 0 && Date.now() - t0 > MAX_MS) return null;
+      if ((++this.nodes & 255) === 0 && Date.now() - t0 > ms) { this.cut = true; return (this.state = 'running'); }
+      // Missing a coin that is required counts as a crash.
+      if (!sim.dead && this.need.length) {
+        for (var c = 0; c < this.need.length; c++) {
+          if (sim.x > this.need[c].x + 3 && sim.coins.indexOf(this.need[c].coinIndex) < 0) { sim.dead = true; break; }
+        }
+      }
       if (sim.dead) continue;
-      if (sim.won) return stack.slice(1).map(function (n) { return n.hold; }).concat([hold]);
+      if (sim.x > this.farthest) { this.farthest = sim.x; this.farY = sim.y; }
+      if (sim.won) {
+        this.plan = stack.slice(1).map(function (n) { return n.hold; }).concat([hold]);
+        return (this.state = 'won');
+      }
       var st = sim.getState();
       if (bad.has(key(st, stack.length))) continue;
       stack.push({ state: st, tries: null, idx: 0, hold: hold });
     }
-    return null;
-  }
+    return (this.state = 'exhausted');
+  };
 
-  /* Make a plan for the current moment of a run. Returns an array of holds or null.
+  /* Make a plan for the current moment of a run (Nexus Mode). Returns an array of holds or null.
      fromStart = true when the run is at the very start (those plans are cached). */
   N.plan = function (level, sim, fromStart) {
     if (fromStart && cache.has(level.data)) return cache.get(level.data);
-    var plan = solve(level, sim.getState());
+    var s = new Search(level, { startState: sim.getState() });
+    s.run(MAX_MS);
+    var plan = s.state === 'won' ? s.plan : null;
     if (fromStart) cache.set(level.data, plan);
     return plan;
   };
   N.DECIDE = DECIDE;
-})(typeof window !== 'undefined' ? window : globalThis);
 
+  /* ------------------------------------------------------------------------
+     verify: can this level be beaten while collecting EVERY coin?
+     data       the level (the same object the editor saves)
+     onProgress called now and then with { pct: 0 to 1, text: '...' }
+     Returns { promise, cancel }. The promise gives:
+       { ok: true }
+       { ok: false, certain: true/false, problems: [ { kind, x, y, w, text } ] }
+     problems: kind 'coin' (an impossible coin at x, y) or 'area' (a stretch around x that cannot be passed).
+     certain = false means Nexus ran out of time, so it is only "could not find a way".
+     ------------------------------------------------------------------------ */
+  N.verify = function (data, onProgress) {
+    var cancelled = false, timer = null;
+    var level = PD.prepareLevel(data);
+    var coinCells = data.objects.filter(function (o) { return o.t === 'coin'; });   // Same order as the coin numbers.
+    var allCoins = coinCells.map(function (c, i) { return i; });
+    var SLICE = 30;                                                                   // Milliseconds of thinking per slice.
+
+    function say(pct, text) { if (onProgress && !cancelled) onProgress({ pct: Math.max(0, Math.min(1, pct)), text: text }); }
+
+    // Run one search in slices. Calls done(search) when it won, ran out of options, or ran out of time.
+    function job(opts, budgetMs, label, done) {
+      var s = new Search(level, opts), spent = 0;
+      (function tick() {
+        if (cancelled) return;
+        var t = Date.now();
+        s.run(SLICE);
+        spent += Date.now() - t;
+        say(s.farthest / level.length, label);
+        if (s.state === 'running' && spent < budgetMs) { timer = setTimeout(tick, 0); return; }
+        done(s);
+      })();
+    }
+
+    var promise = new Promise(function (resolve) {
+      var coinText = allCoins.length ? 'Nexus is looking for a path that grabs all ' + allCoins.length + ' coin' + (allCoins.length > 1 ? 's' : '') + '...' : 'Nexus is looking for a path through your level...';
+      job({ coins: allCoins }, 14000, coinText, function (s1) {
+        if (s1.state === 'won') { resolve({ ok: true, plan: s1.plan }); return; }
+        // It failed. Work out why, so the editor can point at the problem.
+        job({ coins: [] }, 8000, 'Checking if the level itself can be beaten...', function (s2) {
+          if (s2.state !== 'won') {
+            var x = Math.max(0, s2.farthest);
+            resolve({ ok: false, certain: s2.state === 'exhausted', problems: [{
+              kind: 'area', x: Math.floor(x - 2), y: Math.round(s2.farY), w: 9,
+              text: 'Nexus could not get past this part of the level. Check the jump or gap here.'
+            }] });
+            return;
+          }
+          // The level can be beaten, so some coin is the problem. Try each coin on its own.
+          var bad = [], i = 0;
+          (function nextCoin() {
+            if (cancelled) return;
+            if (i >= allCoins.length) {
+              if (!bad.length) {   // Every coin works alone, but not all in one run.
+                bad = allCoins.map(function (n) { return n; });
+                resolve({ ok: false, certain: true, together: true, problems: bad.map(function (n) {
+                  return { kind: 'coin', x: coinCells[n].x, y: coinCells[n].y, text: 'You can get each coin on its own, but not all of them in the same run.' };
+                }) });
+              } else {
+                resolve({ ok: false, certain: true, problems: bad.map(function (n) {
+                  return { kind: 'coin', x: coinCells[n].x, y: coinCells[n].y, text: 'Nexus cannot reach this coin.' };
+                }) });
+              }
+              return;
+            }
+            var n = i++;
+            job({ coins: [n] }, 6000, 'Checking coin ' + (n + 1) + ' of ' + allCoins.length + '...', function (s3) {
+              if (s3.state !== 'won') bad.push(n);
+              nextCoin();
+            });
+          })();
+        });
+      });
+    });
+
+    return { promise: promise, cancel: function () { cancelled = true; if (timer) clearTimeout(timer); } };
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
 </script>
   <script>
 /* js/pics.js */
@@ -4371,6 +4491,20 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   var drag = null;                    // What the current mouse drag is doing.
   var time = 0, last = 0;
   var pv = null;                      // Music preview: null, or { t0, wall } while it plays.
+  var flags = [], flagIdx = 0;        // Problems Nexus found (an impossible coin or area), drawn in red.
+
+  // Show the red banner for the current problem and move the view to it.
+  function showFlag(i) {
+    if (!flags.length) { $('ed-flag').classList.add('hidden'); return; }
+    flagIdx = (i + flags.length) % flags.length;
+    var f = flags[flagIdx], s = PD.Game.size();
+    cam.x = Math.max(-8, f.x - (s.W / u) / 2);
+    cam.y = PD.clamp((f.kind === 'coin' ? f.y : 5) - (s.H / u) / 2 - 1, -12, 30);   // Put the problem in the middle of the screen
+    $('ed-flag-text').textContent = 'Nexus problem ' + (flagIdx + 1) + ' of ' + flags.length + ': ' + f.text + ' Fix it, save, then press Publish again.';
+    $('ed-flag-next').style.display = flags.length > 1 ? '' : 'none';
+    $('ed-flag').classList.remove('hidden');
+  }
+  function clearFlags() { flags = []; $('ed-flag').classList.add('hidden'); }
 
   // ------------------------------------------------------------------------
   // Music preview (like the GD editor): a line at the left of the screen plays the music,
@@ -4444,14 +4578,17 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
   // ------------------------------------------------------------------------
   // Opening and closing
   // ------------------------------------------------------------------------
-  E.open = function (level) {
+  E.open = function (level, opts) {
     lv = clone(level);
     undo = []; redo = []; dirty = false; rot = 0;
     var s = PD.Game.size();
     u = PD.clamp(Math.min(s.H / 16, s.W / 22), 18, 46);
     cam.x = -3; cam.y = -(170 / u);
     $('ed-name').value = lv.name;
+    clearFlags();
     E.resume();
+    // Opened from a failed publish check: jump to the first problem.
+    if (opts && opts.flags && opts.flags.length) { flags = opts.flags; showFlag(0); }
   };
 
   // Come back to the editor (also used after a test play).
@@ -4469,6 +4606,7 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
 
   function close() {
     stopPreview();
+    clearFlags();
     active = false;
     PD.Game.setOff(false);
     PD.Game.menuMusic();
@@ -4841,11 +4979,33 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
         ctx.strokeRect(hover.x + 0.05, hover.y + 0.05, 0.9, 0.9);
       }
     }
+    // Nexus problems: pulsing red rings around impossible coins, red bands over impossible areas.
+    if (flags.length) {
+      var pulse = 0.5 + 0.5 * Math.sin(time * 6);
+      flags.forEach(function (f) {
+        if (f.kind === 'coin') {
+          ctx.fillStyle = 'rgba(255,60,80,' + (0.15 + 0.12 * pulse) + ')';
+          ctx.beginPath(); ctx.arc(f.x + 0.5, f.y + 0.5, 1.1 + 0.2 * pulse, 0, 6.2832); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,77,94,' + (0.7 + 0.3 * pulse) + ')'; ctx.lineWidth = 0.14;
+          ctx.beginPath(); ctx.arc(f.x + 0.5, f.y + 0.5, 0.9 + 0.2 * pulse, 0, 6.2832); ctx.stroke();
+        } else {
+          ctx.fillStyle = 'rgba(255,60,80,' + (0.12 + 0.1 * pulse) + ')'; ctx.fillRect(f.x, 0, f.w || 9, PD.CEIL);
+          ctx.strokeStyle = 'rgba(255,77,94,' + (0.7 + 0.3 * pulse) + ')'; ctx.lineWidth = 0.12; ctx.setLineDash([0.5, 0.35]);
+          ctx.strokeRect(f.x, 0.06, f.w || 9, PD.CEIL - 0.12); ctx.setLineDash([]);
+        }
+      });
+    }
     ctx.restore();
 
     // Labels are drawn in normal screen space so the text is the right way up.
     ctx.font = '700 13px ' + getComputedStyle(document.body).fontFamily;
     ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+    flags.forEach(function (f) {
+      ctx.fillStyle = '#ff7a89'; ctx.textAlign = 'center';
+      if (f.kind === 'coin') ctx.fillText('Nexus cannot reach this coin', (f.x + 0.5 - cam.x) * u, H - (f.y + 2.2 - cam.y) * u);
+      else ctx.fillText('Nexus got stuck around here', (f.x + (f.w || 9) / 2 - cam.x) * u, H - (7 - cam.y) * u);
+    });
+    ctx.fillStyle = '#ffffff';
     ctx.fillText('START', (0 - cam.x) * u, H - (1.5 - cam.y) * u);
     ctx.fillText('FINISH', (end + 0.25 - cam.x) * u, H - (-0.6 - cam.y) * u);
     // The preview line: this is where the player would be.
@@ -4955,6 +5115,8 @@ PD.SONG_CREDITS = [['Level 5 music', 'Fearless Funk by DR MØB & Chris Linton (N
     $('ed-undo').onclick = doUndo;
     $('ed-redo').onclick = doRedo;
     $('ed-preview').onclick = function () { if (pv) stopPreview(); else startPreview(); };
+    $('ed-flag-next').onclick = function () { showFlag(flagIdx + 1); };
+    $('ed-flag-ok').onclick = clearFlags;
     $('ed-settings').onclick = function () { stopPreview(); openSetup(); };
     $('ed-export').onclick = function () { stopPreview(); openExport(); };
     $('ed-save').onclick = save;
@@ -9681,8 +9843,8 @@ PD.registerLevel({
 
   // ------------------------------------------------------------------------
   // Publishing (the Publish button on My Levels calls Hub.publish)
-  // Steps: log in -> beat your own level in normal mode -> the level is saved
-  // as a draft and sent in for review -> an admin approves it.
+  // Steps: log in -> Nexus (the bot) checks the level and must grab every coin ->
+  // the level is sent in and goes live as N/A -> a moderator rates it later.
   // ------------------------------------------------------------------------
   var MAP_KEY = 'popdash.publishedIds';               // Remembers which server level a local level became.
   var pendingPublish = null;                          // The level the player must beat right now.
@@ -9699,17 +9861,58 @@ PD.registerLevel({
       UI.modal('Too small', el('div', 'sub', 'A level needs at least 20 objects before it can be published.'), [{ text: 'OK' }]);
       return;
     }
-    var body = el('div', 'sub', 'First you have to beat "' + lv.name + '" in normal mode. That proves it can be finished. ' +
-      'After that it goes live right away with the difficulty N/A. A moderator will rate it later. ' +
-      'If you published this level before, the new version replaces it and goes back to N/A.');
-    UI.modal('Publish this level?', body, [
-      { text: 'Cancel' },
-      { text: 'Start', cls: 'green', fn: function () {
-        pendingPublish = { id: lv.id, level: lv };
-        UI.playLevel(lv, { from: 'custom' });          // Normal mode, so practice does not count.
-      } }
-    ]);
+    checkAndPublish(lv);
   };
+
+  // Step 1: Nexus (the bot) plays the level and must grab EVERY coin.
+  // If it can, the level is published right away. You do not have to beat it yourself.
+  var checking = null;                                // The check that is running right now.
+  function closeModal() { document.getElementById('overlay-modal').classList.add('hidden'); }
+
+  function checkAndPublish(lv) {
+    var wrap = el('div');
+    wrap.appendChild(el('div', 'sub', 'Nexus is playing "' + lv.name + '" to make sure it can be finished while grabbing every coin. If it can, your level is published right away.'));
+    var bar = el('div', 'nx-bar'), fill = el('i'); bar.appendChild(fill); wrap.appendChild(bar);
+    var label = el('div', 'sub nx-label', 'Starting...'); wrap.appendChild(label);
+    var job = PD.Nexus.verify(lv, function (p) { fill.style.width = Math.round(p.pct * 100) + '%'; label.textContent = p.text; });
+    checking = job;
+    UI.modal('Checking your level', wrap, [{ text: 'Cancel', fn: function () { job.cancel(); checking = null; } }]);
+    job.promise.then(function (res) {
+      if (checking !== job) return;                   // It was cancelled.
+      checking = null;
+      if (res.ok) { closeModal(); sendToServer(lv); } else showFailure(lv, res);
+    });
+  }
+
+  // Nexus could not do it. Offer to open the editor with the problem spots marked in red.
+  function showFailure(lv, res) {
+    var body = el('div');
+    body.appendChild(el('div', 'sub', res.certain
+      ? 'Nexus could not find any way to beat this level and grab every coin, so it cannot be published yet.'
+      : 'Nexus searched for a while but could not find a way to beat this level and grab every coin. It might be impossible, or just too hard for the bot.'));
+    res.problems.slice(0, 4).forEach(function (pr) {
+      body.appendChild(el('div', 'sub nx-problem', (pr.kind === 'coin' ? 'Coin at x ' + pr.x + ', y ' + pr.y + ': ' : 'Around x ' + pr.x + ': ') + pr.text));
+    });
+    body.appendChild(el('div', 'sub', 'Go to the editor? The problem will be marked in red so you can fix it, then press Publish again.'));
+    UI.modal('Failed: Nexus could not do it', body, [
+      { text: 'Not now' },
+      { text: 'Go to the editor', cls: 'green', fn: function () { PD.Editor.open(lv, { flags: res.problems }); } }
+    ]);
+  }
+
+  // Nexus passed the level, so send it in. The server was told it is beaten, same as before.
+  function sendToServer(lv) {
+    var map = loadMap();
+    G.toast('Nexus found a path with every coin. Publishing...');
+    call('POST', '/levels', { id: map[lv.id] || undefined, name: lv.name, data: lv }).then(function (res) {
+      map[lv.id] = res.level.id; saveMap(map);
+      return call('POST', '/levels/' + res.level.id + '/submit', { beaten: true });
+    }).then(function () {
+      G.toast('Published! It shows as N/A until a moderator rates it.');
+    }, function (err) {
+      G.toast(err.status === 409 ? 'That level is already published' : err.message);
+    });
+  }
 
   // ui.js calls this when any level is beaten.
   Hub.onComplete = function (stats, playing) {
